@@ -280,19 +280,32 @@
         },
         {
             "parameters": {
+                "jsCode": "const editFields = $('Edit Fields').item.json;\nconst technologies = $('Parse YouTube Summary').item.json._technologies || [];\nconst notionPageId = $json.id;\n\nconst body = {\n  cover: {\n    type: \"external\",\n    external: { url: editFields.thumbnails_url || \"\" }\n  },\n  properties: {\n    \"いいね数\": { number: editFields.likeCount ?? 0 },\n    \"再生数\": { number: editFields.viewCount ?? 0 },\n    \"セーブ数\": { number: editFields.favoriteCount ?? 0 },\n    \"コメント数\": { number: editFields.commentCount ?? 0 },\n    \"チャンネルID\": { rich_text: [{ text: { content: editFields.channel_id || \"\" } }] },\n    \"チャンネル名\": { rich_text: [{ text: { content: editFields.channel_name || \"\" } }] },\n    \"URL\": { url: editFields.videoURL || null },\n    \"published_at\": { date: { start: editFields.published_at || new Date().toISOString() } },\n    \"使用技術\": { multi_select: technologies },\n    \"追加日\": { date: { start: new Date().toISOString().substring(0, 10) } }\n  }\n};\n\nreturn [{ json: { notionPageId, body } }];"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                848,
+                288
+            ],
+            "id": "b1c2d3e4-f5a6-7890-bcde-f01234567890",
+            "name": "Build Notion Patch Body"
+        },
+        {
+            "parameters": {
                 "method": "PATCH",
-                "url": "=https://api.notion.com/v1/pages/{{ $json.id }}",
+                "url": "={{ 'https://api.notion.com/v1/pages/' + $json.notionPageId }}",
                 "authentication": "predefinedCredentialType",
                 "nodeCredentialType": "notionApi",
                 "sendBody": true,
                 "specifyBody": "json",
-                "jsonBody": "={\n  \"cover\": {\n    \"type\": \"external\",\n    \"external\": {\n      \"url\": \"{{ $('Edit Fields').item.json.thumbnails_url }}\"\n    }\n  },\n  \"properties\": {\n    \"いいね数\": {\n      \"number\": {{ $('Edit Fields').item.json.likeCount }}\n    },\n    \"再生数\": {\n      \"number\": {{ $('Edit Fields').item.json.viewCount }}\n    },\n    \"セーブ数\": {\n      \"number\": {{ $('Edit Fields').item.json.favoriteCount }}\n    },\n    \"コメント数\": {\n      \"number\": {{ $('Edit Fields').item.json.commentCount }}\n    },\n    \"チャンネルID\": {\n      \"rich_text\": [{ \"text\": { \"content\": \"{{ $('Edit Fields').item.json.channel_id }}\" } }]\n    }, \n    \"チャンネル名\": {\n      \"rich_text\": [{ \"text\": { \"content\": \"{{ $('Edit Fields').item.json.channel_name }}\" } }]\n    },\n    \"URL\": {\n      \"url\": \"{{ $('Edit Fields').item.json.videoURL }}\"\n    },\n    \"published_at\": {\n      \"date\": { \"start\": \"{{ $('Edit Fields').item.json.published_at }}\" }\n    },\n    \"使用技術\": {\n      \"multi_select\": {{ JSON.stringify($('Parse YouTube Summary').item.json._technologies) }}\n    },\n    \"追加日\": {\n      \"date\": { \"start\": \"{{ $now.toISO().substring(0, 10) }}\" }\n    }\n  }\n}",
+                "jsonBody": "={{ JSON.stringify($json.body) }}",
                 "options": {}
             },
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.4,
             "position": [
-                848,
+                1024,
                 288
             ],
             "id": "88186501-07ab-406b-baed-abae9c3c3eb1",
@@ -388,7 +401,7 @@
             "type": "n8n-nodes-base.googleSheets",
             "typeVersion": 4.7,
             "position": [
-                1024,
+                1200,
                 288
             ],
             "id": "2599212c-6a94-4755-9f04-fd21268f44df",
@@ -740,6 +753,17 @@
             ]
         },
         "HTTP Request": {
+            "main": [
+                [
+                    {
+                        "node": "Build Notion Patch Body",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Build Notion Patch Body": {
             "main": [
                 [
                     {
