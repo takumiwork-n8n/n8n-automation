@@ -1,0 +1,943 @@
+{
+    "nodes": [
+        {
+            "parameters": {
+                "resource": "video",
+                "operation": "analyze",
+                "modelId": {
+                    "__rl": true,
+                    "value": "models/gemini-3.1-flash-lite-preview",
+                    "mode": "list",
+                    "cachedResultName": "models/gemini-3.1-flash-lite-preview"
+                },
+                "text": "以下のYouTube動画を日本語で要約してください。  \n- 重要ポイントを箇条書きで整理  \n- 結論 → 理由 → 具体例 の順で構成  \n- 専門用語には簡単な補足を追加  \n- 最後に「この動画から得られる学び」を3つ提示してください\n- 動画内で言及されているプログラミング言語・フレームワーク・ツール・サービスをすべて抽出してください（技術的な内容でない場合は「なし」と記載）\n\n必ず以下のフォーマットで出力してください：\n**動画タイトル:** xxx\n**動画概要:** xxx\n**使用技術:** Python, TensorFlow, Docker（カンマ区切り。なければ「なし」）\n**結論:** xxx\n**理由:**\n* xxx\n**具体例:**\n* xxx\n**この動画から得られる学び:**\n1. xxx",
+                "videoUrls": "={{ $json.videoURL }}",
+                "options": {}
+            },
+            "type": "@n8n/n8n-nodes-langchain.googleGemini",
+            "typeVersion": 1.1,
+            "position": [
+                1920,
+                1776
+            ],
+            "id": "c19c26fe-6996-4d4f-af49-3c2925ae280c",
+            "name": "Analyze video",
+            "retryOnFail": true,
+            "credentials": {
+                "googlePalmApi": {
+                    "id": "aYlcpx81lbjQfwmb",
+                    "name": "Google Gemini(PaLM) Api account"
+                }
+            },
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "fieldsToAggregate": {
+                    "fieldToAggregate": [
+                        {
+                            "fieldToAggregate": "summary"
+                        },
+                        {
+                            "fieldToAggregate": "URL"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.aggregate",
+            "typeVersion": 1,
+            "position": [
+                1760,
+                1488
+            ],
+            "id": "4ada4523-d69b-4b12-ad0d-328c2268bfe5",
+            "name": "Aggregate"
+        },
+        {
+            "parameters": {
+                "select": "channel",
+                "channelId": {
+                    "__rl": true,
+                    "value": "={{ $('config2').first().json.Slack_channel_name }}",
+                    "mode": "name"
+                },
+                "text": "=今日のyoutube情報収集が完了しました！",
+                "otherOptions": {}
+            },
+            "type": "n8n-nodes-base.slack",
+            "typeVersion": 2.4,
+            "position": [
+                1936,
+                1488
+            ],
+            "id": "3144c19a-9c6b-40fc-b29a-a87949e45252",
+            "name": "Send a message",
+            "webhookId": "c6e05926-a8ff-4e40-8a12-bb06a47cdabe",
+            "retryOnFail": true,
+            "maxTries": 3,
+            "credentials": {
+                "slackApi": {
+                    "id": "mdzFl9ZWk7LdHJbO",
+                    "name": "Slack account"
+                }
+            },
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "assignments": {
+                    "assignments": [
+                        {
+                            "id": "ed471aed-a00a-4702-8237-ee72b2b8adce",
+                            "name": "videoURL",
+                            "value": "={{ 'https://www.youtube.com/watch?v=' + $json.id }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "b4db54fa-0c41-46ea-b522-0330f58833f9",
+                            "name": "thumbnails_url",
+                            "value": "={{ $json.snippet.thumbnails.high.url }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "2ea9525b-c419-4f3e-8063-4781ea3e19f7",
+                            "name": "channel_name",
+                            "value": "={{ $json.snippet.channelTitle }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "f5168aa8-6f2a-4571-9623-897052b40616",
+                            "name": "video_title",
+                            "value": "={{ $json.snippet.localized.title }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "4efa1747-4df9-4fac-96b7-b648cff31536",
+                            "name": "published_at",
+                            "value": "={{ $json.snippet.publishedAt }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "5e2568eb-adc5-44ea-a357-58c28cfb6e42",
+                            "name": "viewCount",
+                            "value": "={{ $json.statistics.viewCount }}",
+                            "type": "number"
+                        },
+                        {
+                            "id": "f811f606-c078-4aff-b478-01ac63ac6da1",
+                            "name": "likeCount",
+                            "value": "={{ $json.statistics.likeCount }}",
+                            "type": "number"
+                        },
+                        {
+                            "id": "5ede99b3-4471-4a91-9ab1-a1a343c59316",
+                            "name": "favoriteCount",
+                            "value": "={{ $json.statistics.favoriteCount }}",
+                            "type": "number"
+                        },
+                        {
+                            "id": "6d28fb56-a089-495e-87b7-25c497cbf432",
+                            "name": "commentCount",
+                            "value": "={{ $json.statistics.commentCount }}",
+                            "type": "number"
+                        },
+                        {
+                            "id": "7f825ad1-69e8-4972-b3b6-27a62729d9d8",
+                            "name": "channel_id",
+                            "value": "={{ $json.snippet.channelId }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "768e5d7a-4dcf-4f1a-94f3-c4714862a578",
+                            "name": "video_title",
+                            "value": "={{ $json.snippet.title }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "fd43ef31-df25-4fcb-9f1c-51be57730f8b",
+                            "name": "video_id",
+                            "value": "={{ $json.id }}",
+                            "type": "string"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.set",
+            "typeVersion": 3.4,
+            "position": [
+                1728,
+                1776
+            ],
+            "id": "884ebbd5-ef8b-4e90-ac69-a2682a740c3c",
+            "name": "Edit Fields"
+        },
+        {
+            "parameters": {
+                "options": {}
+            },
+            "type": "n8n-nodes-base.splitInBatches",
+            "typeVersion": 3,
+            "position": [
+                1536,
+                1680
+            ],
+            "id": "7a791fe0-7aa9-4347-a246-4d66e733f149",
+            "name": "Loop Over Items1"
+        },
+        {
+            "parameters": {},
+            "type": "n8n-nodes-base.wait",
+            "typeVersion": 1.1,
+            "position": [
+                2848,
+                1776
+            ],
+            "id": "715d5506-a908-4770-8cb3-604bff857430",
+            "name": "Wait After Slack",
+            "webhookId": "bb2029ec-eed5-49d2-89db-45808d5eccd0"
+        },
+        {
+            "parameters": {
+                "jsCode": "const raw = $input.first().json;\nconst rawText = raw.content.parts[0].text;\n\n// ===== パース =====\nfunction extractSection(text, heading) {\n  const regex = new RegExp(`\\\\*\\\\*${heading}[：:]?\\\\*\\\\*[\\\\s\\\\S]*?(?=\\\\n\\\\*\\\\*|$)`);\n  const match = text.match(regex);\n  if (!match) return \"\";\n  return match[0].replace(new RegExp(`\\\\*\\\\*${heading}[：:]?\\\\*\\\\*`), \"\").trim();\n}\nfunction extractBullets(text, heading) {\n  return extractSection(text, heading)\n    .split('\\n')\n    .filter(l => l.trim().startsWith('*') || l.trim().startsWith('-'))\n    .map(l => l.replace(/^\\s*[\\*\\-]\\s*/, \"\").trim())\n    .filter(l => l.length > 0);\n}\nfunction extractNumbered(text, heading) {\n  return extractSection(text, heading)\n    .split('\\n')\n    .filter(l => /^\\s*\\d+\\./.test(l))\n    .map(l => l.replace(/^\\s*\\d+\\.\\s*/, \"\").trim())\n    .filter(l => l.length > 0);\n}\n\nconst title = $('Edit Fields').first().json.video_title || \"（タイトル不明）\";\nconst channelName = $('Edit Fields').first().json.channel_name || \"\";\nconst viewCount = $('Edit Fields').first().json.viewCount || 0;\nconst likeCount = $('Edit Fields').first().json.likeCount || 0;\nconst videoURL = $('Edit Fields').first().json.videoURL || \"\";\n\nconst summaryMatch = rawText.match(/\\*\\*動画概要[：:]?\\*\\*\\s*([\\s\\S]*?)(?=\\n\\*\\*|$)/);\nconst summary = summaryMatch ? summaryMatch[1].trim() : \"\";\nconst techMatch = rawText.match(/\\*\\*使用技術[：:]?\\*\\*\\s*([^\\n]+)/);\nconst techRaw = techMatch ? techMatch[1].trim() : \"なし\";\nconst technologies = (techRaw === \"なし\" || techRaw === \"\") ? [] : techRaw.split(',').map(t => ({ name: t.trim() })).filter(t => t.name.length > 0);\nconst conclusionMatch = rawText.match(/\\*\\*結論[：:]?\\*\\*\\s*([\\s\\S]*?)(?=\\n\\*\\*|$)/);\nconst conclusion = conclusionMatch ? conclusionMatch[1].trim() : \"\";\nconst reasons = extractBullets(rawText, \"理由\");\nconst examples = extractBullets(rawText, \"具体例\");\nconst learnings = extractNumbered(rawText, \"この動画から得られる学び\");\n\n// ===== ブロックヘルパー =====\nconst divider = { object: \"block\", type: \"divider\", divider: {} };\n\nfunction callout(emoji, content, color) {\n  return {\n    object: \"block\", type: \"callout\",\n    callout: {\n      rich_text: [{ type: \"text\", text: { content } }],\n      icon: { type: \"emoji\", emoji },\n      color: color || \"default\"\n    }\n  };\n}\nfunction h2(content, color) {\n  return {\n    object: \"block\", type: \"heading_2\",\n    heading_2: {\n      rich_text: [{ type: \"text\", text: { content }, annotations: { bold: true } }],\n      color: color || \"default\"\n    }\n  };\n}\nfunction h3(content) {\n  return {\n    object: \"block\", type: \"heading_3\",\n    heading_3: { rich_text: [{ type: \"text\", text: { content } }] }\n  };\n}\nfunction quote(content) {\n  return {\n    object: \"block\", type: \"quote\",\n    quote: {\n      rich_text: [{ type: \"text\", text: { content }, annotations: { bold: true } }],\n      color: \"default\"\n    }\n  };\n}\nfunction bullet(content) {\n  const m = content.match(/^\\*\\*(.+?)\\*\\*[：:]\\s*(.*)/);\n  if (m) return {\n    object: \"block\", type: \"bulleted_list_item\",\n    bulleted_list_item: { rich_text: [\n      { type: \"text\", text: { content: m[1] + \": \" }, annotations: { bold: true } },\n      { type: \"text\", text: { content: m[2] } }\n    ]}\n  };\n  return {\n    object: \"block\", type: \"bulleted_list_item\",\n    bulleted_list_item: { rich_text: [{ type: \"text\", text: { content } }] }\n  };\n}\nfunction numbered(content, idx) {\n  return {\n    object: \"block\", type: \"numbered_list_item\",\n    numbered_list_item: { rich_text: [{ type: \"text\", text: { content } }] }\n  };\n}\nfunction toggle(emoji, label, children) {\n  return {\n    object: \"block\", type: \"toggle\",\n    toggle: {\n      rich_text: [{ type: \"text\", text: { content: emoji + \"  \" + label }, annotations: { bold: true } }],\n      children\n    }\n  };\n}\nfunction paragraph(content) {\n  return {\n    object: \"block\", type: \"paragraph\",\n    paragraph: { rich_text: [{ type: \"text\", text: { content } }] }\n  };\n}\n\n// ===== ブロック組み立て =====\nconst children = [];\n\n// ── 動画概要 callout ──\nchildren.push(callout(\"📺\", summary, \"blue_background\"));\n\n// ── 統計情報 callout ──\nconst statsText = `👁  再生数: ${Number(viewCount).toLocaleString()}　　👍  いいね数: ${Number(likeCount).toLocaleString()}　　📺  ${channelName}`;\nchildren.push(callout(\"📊\", statsText, \"gray_background\"));\n\nchildren.push(divider);\n\n// ── 結論（quote で強調）──\nchildren.push(h2(\"💡  結論\"));\nchildren.push(quote(conclusion));\n\nchildren.push(divider);\n\n// ── 理由（toggle）──\nif (reasons.length > 0) {\n  children.push(toggle(\"🔍\", \"理由を見る\", reasons.map(r => bullet(r))));\n}\n\n// ── 具体例（toggle）──\nif (examples.length > 0) {\n  children.push(toggle(\"🧪\", \"具体例を見る\", examples.map(e => bullet(e))));\n}\n\nchildren.push(divider);\n\n// ── 学び（numbered callout wrapper）──\nif (learnings.length > 0) {\n  children.push(h2(\"🎯  この動画から得られる学び\"));\n  learnings.forEach(l => children.push(numbered(l)));\n}\n\nchildren.push(divider);\n\n// ── フッター ──\nchildren.push(callout(\"🔗\", `元動画: ${videoURL}`, \"default\"));\n\n// ===== Notion APIボディ =====\nreturn [{\n  json: {\n    parent: { database_id: $('config').first().json.notion_database_id },\n    properties: {\n      \"タイトル\": {\n        title: [{ text: { content: title } }]\n      }\n    },\n    children,\n    _technologies: technologies\n  }\n}];"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                2112,
+                1776
+            ],
+            "id": "00dcd580-5cc3-41cb-96f5-4f22a15f7edd",
+            "name": "Parse YouTube Summary",
+            "retryOnFail": false,
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "resource": "video",
+                "operation": "get",
+                "videoId": "={{ $json.videoId }}",
+                "part": [
+                    "statistics",
+                    "snippet",
+                    "contentDetails"
+                ],
+                "options": {}
+            },
+            "id": "8d560263-a86b-4e74-a402-356060602651",
+            "name": "Get Video Stats1",
+            "position": [
+                1120,
+                1680
+            ],
+            "type": "n8n-nodes-base.youTube",
+            "typeVersion": 1,
+            "retryOnFail": true,
+            "maxTries": 3,
+            "credentials": {
+                "youTubeOAuth2Api": {
+                    "id": "hmBoKYK4QWv5SNsH",
+                    "name": "YouTube account"
+                }
+            },
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "jsCode": "// ショート動画 & 低パフォーマンス動画を除外\nreturn $input.all().filter(item => {\n  const stats = item.json.statistics || {};\n  const snippet = item.json.snippet || {};\n  const contentDetails = item.json.contentDetails || {};\n\n  // 1. タイトル・説明に #shorts が含まれる場合は除外\n  const title = (snippet.title || '').toLowerCase();\n  const description = (snippet.description || '').toLowerCase();\n  if (title.includes('#shorts') || description.includes('#shorts')) {\n    return false;\n  }\n\n  // 2. 動画時間が180秒（3分）未満はショート扱いで除外\n  if (contentDetails.duration) {\n    const match = contentDetails.duration.match(/PT(?:(\\d+)H)?(?:(\\d+)M)?(?:(\\d+)S)?/);\n    if (match) {\n      const hours = parseInt(match[1] || 0);\n      const minutes = parseInt(match[2] || 0);\n      const seconds = parseInt(match[3] || 0);\n      const totalSeconds = hours * 3600 + minutes * 60 + seconds;\n      if (totalSeconds < 180) return false;\n    }\n  }\n\n  // 3. 再生数が1000未満は低パフォーマンスとして除外\n  const viewCount = parseInt(stats.viewCount || 0);\n  if (viewCount < 1000) return false;\n\n  return true;\n});"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1312,
+                1680
+            ],
+            "id": "f2a1b3c4-d5e6-7890-abcd-ef1234567890",
+            "name": "Filter Shorts & Low Perf",
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "maxItems": 5
+            },
+            "type": "n8n-nodes-base.limit",
+            "typeVersion": 1,
+            "position": [
+                1504,
+                1680
+            ],
+            "id": "21f3bbbc-162e-4734-987b-3b0102032b65",
+            "name": "Limit Top 5 Videos"
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://api.notion.com/v1/pages",
+                "authentication": "predefinedCredentialType",
+                "nodeCredentialType": "notionApi",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{ JSON.stringify({ parent: $json.parent, properties: $json.properties, children: $json.children }) }}",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.4,
+            "position": [
+                2304,
+                1776
+            ],
+            "id": "04e6496a-8f9e-4334-8d50-75e1e7668464",
+            "name": "HTTP Request",
+            "credentials": {
+                "notionApi": {
+                    "id": "4TjuzbBnLTySHBjS",
+                    "name": "Notion account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "method": "PATCH",
+                "url": "=https://api.notion.com/v1/pages/{{ $json.id }}",
+                "authentication": "predefinedCredentialType",
+                "nodeCredentialType": "notionApi",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={\n  \"cover\": {\n    \"type\": \"external\",\n    \"external\": {\n      \"url\": \"{{ $('Edit Fields').item.json.thumbnails_url }}\"\n    }\n  },\n  \"properties\": {\n    \"いいね数\": {\n      \"number\": {{ $('Edit Fields').item.json.viewCount }}\n    },\n    \"再生数\": {\n      \"number\": {{ $('Edit Fields').item.json.viewCount }}\n    },\n    \"セーブ数\": {\n      \"number\": {{ $('Edit Fields').item.json.favoriteCount }}\n    },\n    \"コメント数\": {\n      \"number\": {{ $('Edit Fields').item.json.commentCount }}\n    },\n    \"チャンネルID\": {\n      \"rich_text\": [{ \"text\": { \"content\": \"{{ $('Edit Fields').item.json.channel_id }}\" } }]\n    }, \n    \"チャンネル名\": {\n      \"rich_text\": [{ \"text\": { \"content\": \"{{ $('Edit Fields').item.json.channel_name }}\" } }]\n    },\n    \"URL\": {\n      \"url\": \"{{ $('Edit Fields').item.json.videoURL }}\"\n    },\n    \"published_at\": {\n      \"date\": { \"start\": \"{{ $('Edit Fields').item.json.published_at }}\" }\n    },\n    \"使用技術\": {\n      \"multi_select\": {{ JSON.stringify($('Parse YouTube Summary').item.json._technologies) }}\n    }\n  }\n}",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.4,
+            "position": [
+                2480,
+                1776
+            ],
+            "id": "1ccf401c-ff52-4105-a367-3547c0e5cbed",
+            "name": "HTTP Request1",
+            "credentials": {
+                "notionApi": {
+                    "id": "4TjuzbBnLTySHBjS",
+                    "name": "Notion account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "append",
+                "documentId": {
+                    "__rl": true,
+                    "value": "1M9jEn_Gh-z3tjJIx9aqo7LDnNFKsHrSWwLuO8KwHmGg",
+                    "mode": "list",
+                    "cachedResultName": "All_get_AI_news_Infomation",
+                    "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1M9jEn_Gh-z3tjJIx9aqo7LDnNFKsHrSWwLuO8KwHmGg/edit?usp=drivesdk"
+                },
+                "sheetName": {
+                    "__rl": true,
+                    "value": 2106137711,
+                    "mode": "list",
+                    "cachedResultName": "Youtube_output_list",
+                    "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1M9jEn_Gh-z3tjJIx9aqo7LDnNFKsHrSWwLuO8KwHmGg/edit#gid=2106137711"
+                },
+                "columns": {
+                    "mappingMode": "defineBelow",
+                    "value": {
+                        "title": "={{ $('Edit Fields').item.json.video_title }}",
+                        "videoId": "={{ $('Edit Fields').item.json.video_id }}",
+                        "URL": "={{ 'https://www.youtube.com/watch?v=' + $json.id }}",
+                        "publishedAt": "={{ $now }}",
+                        "channelTitle": "={{ $('Edit Fields').item.json.channel_name }}"
+                    },
+                    "matchingColumns": [],
+                    "schema": [
+                        {
+                            "id": "publishedAt",
+                            "displayName": "publishedAt",
+                            "required": false,
+                            "defaultMatch": false,
+                            "display": true,
+                            "type": "string",
+                            "canBeUsedToMatch": true,
+                            "removed": false
+                        },
+                        {
+                            "id": "channelTitle",
+                            "displayName": "channelTitle",
+                            "required": false,
+                            "defaultMatch": false,
+                            "display": true,
+                            "type": "string",
+                            "canBeUsedToMatch": true,
+                            "removed": false
+                        },
+                        {
+                            "id": "title",
+                            "displayName": "title",
+                            "required": false,
+                            "defaultMatch": false,
+                            "display": true,
+                            "type": "string",
+                            "canBeUsedToMatch": true
+                        },
+                        {
+                            "id": "videoId",
+                            "displayName": "videoId",
+                            "required": false,
+                            "defaultMatch": false,
+                            "display": true,
+                            "type": "string",
+                            "canBeUsedToMatch": true
+                        },
+                        {
+                            "id": "URL",
+                            "displayName": "URL",
+                            "required": false,
+                            "defaultMatch": false,
+                            "display": true,
+                            "type": "string",
+                            "canBeUsedToMatch": true
+                        }
+                    ],
+                    "attemptToConvertTypes": false,
+                    "convertFieldsToString": false
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.googleSheets",
+            "typeVersion": 4.7,
+            "position": [
+                2656,
+                1776
+            ],
+            "id": "138b8435-03ec-4c96-8b65-2bafedfa73a1",
+            "name": "Append row in sheet2",
+            "retryOnFail": true,
+            "maxTries": 3,
+            "credentials": {
+                "googleSheetsOAuth2Api": {
+                    "id": "YnQxPXpSZxUqVI48",
+                    "name": "Google Sheets account"
+                }
+            },
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "documentId": {
+                    "__rl": true,
+                    "value": "={{ $json.sheet_id }}",
+                    "mode": "id"
+                },
+                "sheetName": {
+                    "__rl": true,
+                    "value": "gid=0",
+                    "mode": "list",
+                    "cachedResultName": "Youtube_channnel_list",
+                    "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1M9jEn_Gh-z3tjJIx9aqo7LDnNFKsHrSWwLuO8KwHmGg/edit#gid=0"
+                },
+                "options": {
+                    "dataLocationOnSheet": {
+                        "values": {
+                            "rangeDefinition": "specifyRangeA1",
+                            "range": "A:B"
+                        }
+                    }
+                }
+            },
+            "id": "865e8ae1-6fe4-449a-9150-6f7e71144178",
+            "name": "Get Channels2",
+            "type": "n8n-nodes-base.googleSheets",
+            "typeVersion": 4.5,
+            "position": [
+                -176,
+                1568
+            ],
+            "retryOnFail": true,
+            "maxTries": 3,
+            "credentials": {
+                "googleSheetsOAuth2Api": {
+                    "id": "YnQxPXpSZxUqVI48",
+                    "name": "Google Sheets account"
+                }
+            },
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "options": {}
+            },
+            "type": "n8n-nodes-base.splitInBatches",
+            "typeVersion": 3,
+            "position": [
+                96,
+                1568
+            ],
+            "id": "8518ef46-e45d-4e24-97b1-af0a6865ca9c",
+            "name": "Loop Over Items"
+        },
+        {
+            "parameters": {
+                "assignments": {
+                    "assignments": [
+                        {
+                            "id": "ee57d7a3-8153-471c-88d9-0568ac061b44",
+                            "name": "Slack_channel_name",
+                            "value": "#ニュース通知",
+                            "type": "string"
+                        },
+                        {
+                            "id": "0363c104-efc8-4d5f-83a7-0a0671329702",
+                            "name": "sheet_id",
+                            "value": "1M9jEn_Gh-z3tjJIx9aqo7LDnNFKsHrSWwLuO8KwHmGg",
+                            "type": "string"
+                        },
+                        {
+                            "id": "186f600c-6633-4389-9da0-794713f9a0da",
+                            "name": "Slack_name_collect_insta",
+                            "value": "#インスタのネタ収集",
+                            "type": "string"
+                        },
+                        {
+                            "id": "4af94152-4217-4d2d-a6f6-63782bbb75e0",
+                            "name": "notion_database_id",
+                            "value": "32541b2fa8678058b844f0123c63dd88",
+                            "type": "string"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.set",
+            "typeVersion": 3.4,
+            "position": [
+                -352,
+                1568
+            ],
+            "id": "18efe967-a505-4a8d-8b07-fc5a36ca8bce",
+            "name": "config"
+        },
+        {
+            "parameters": {},
+            "type": "n8n-nodes-base.manualTrigger",
+            "typeVersion": 1,
+            "position": [
+                -592,
+                1568
+            ],
+            "id": "c5a0c9eb-97bf-48d9-bea7-328c33810097",
+            "name": "When clicking ‘Execute workflow’"
+        },
+        {
+            "parameters": {
+                "url": "=https://www.youtube.com/feeds/videos.xml?channel_id={{ $json.youtube_channel_id }}\n",
+                "options": {}
+            },
+            "id": "36ae50ca-6e13-4b0b-8a4f-dc7edb870377",
+            "name": "RSS Feed2",
+            "type": "n8n-nodes-base.rssFeedRead",
+            "typeVersion": 1.2,
+            "position": [
+                320,
+                1712
+            ],
+            "retryOnFail": true,
+            "maxTries": 5,
+            "waitBetweenTries": 2000,
+            "alwaysOutputData": true,
+            "onError": "continueErrorOutput"
+        },
+        {
+            "parameters": {
+                "maxItems": 20
+            },
+            "type": "n8n-nodes-base.limit",
+            "typeVersion": 1,
+            "position": [
+                944,
+                1680
+            ],
+            "id": "0cb54545-5bc6-4792-83d7-807f2da9ca79",
+            "name": "Limit RSS Top 11"
+        },
+        {
+            "parameters": {
+                "documentId": {
+                    "__rl": true,
+                    "value": "1M9jEn_Gh-z3tjJIx9aqo7LDnNFKsHrSWwLuO8KwHmGg",
+                    "mode": "list",
+                    "cachedResultName": "All_get_AI_news_Infomation",
+                    "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1M9jEn_Gh-z3tjJIx9aqo7LDnNFKsHrSWwLuO8KwHmGg/edit?usp=drivesdk"
+                },
+                "sheetName": {
+                    "__rl": true,
+                    "value": 2106137711,
+                    "mode": "list",
+                    "cachedResultName": "Youtube_output_list",
+                    "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1M9jEn_Gh-z3tjJIx9aqo7LDnNFKsHrSWwLuO8KwHmGg/edit#gid=2106137711"
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.googleSheets",
+            "typeVersion": 4.7,
+            "position": [
+                -192,
+                1952
+            ],
+            "id": "1aa83772-7f77-45a5-b910-38b0747e16a7",
+            "name": "Get Existing Videos1",
+            "retryOnFail": true,
+            "maxTries": 3,
+            "credentials": {
+                "googleSheetsOAuth2Api": {
+                    "id": "YnQxPXpSZxUqVI48",
+                    "name": "Google Sheets account"
+                }
+            },
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "jsCode": "// シートのデータからvideoIdを抽出\n// URLカラムから抽出する場合\nconst items = $input.all();\nreturn items.map(item => {\n  let videoId = item.json.videoId;\n  \n  // URLからvideoIdを抽出（URLカラムがある場合）\n  if (!videoId && item.json.URL) {\n    const match = item.json.URL.match(/v=([^&]+)/);\n    videoId = match ? match[1] : null;\n  }\n  \n  return {\n    json: {\n      videoId: videoId\n    }\n  };\n}).filter(item => item.json.videoId);"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                80,
+                1952
+            ],
+            "id": "023023d4-56fb-40f3-b8ee-d149e8b62077",
+            "name": "Extract Existing IDs1"
+        },
+        {
+            "parameters": {
+                "mode": "combine",
+                "fieldsToMatchString": "videoId",
+                "joinMode": "keepNonMatches",
+                "outputDataFrom": "input1",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.merge",
+            "typeVersion": 3.2,
+            "position": [
+                768,
+                1680
+            ],
+            "id": "5816f183-4736-43d9-b9d1-a1c1c035ddb7",
+            "name": "Filter New Videos Only1"
+        },
+        {
+            "parameters": {
+                "jsCode": "const seen = new Set();\nconst unique = [];\n\nfor (const item of $input.all()) {\n  const id = item.json.id?.replace('yt:video:', '');\n  if (id && !seen.has(id)) {\n    seen.add(id);\n    unique.push({\n      json: {\n        videoId: id,\n        title: item.json.title,\n        description: item.json.contentSnippet || '',\n        publishedAt: item.json.isoDate || item.json.pubDate\n      }\n    });\n  }\n}\n\nreturn unique;"
+            },
+            "id": "fa8bdbd2-195f-4258-be19-9d7c38f0e06e",
+            "name": "parse Json",
+            "position": [
+                528,
+                1520
+            ],
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2
+        },
+        {
+            "parameters": {
+                "sortFieldsUi": {
+                    "sortField": [
+                        {
+                            "fieldName": "pubDate",
+                            "order": "descending"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.sort",
+            "typeVersion": 1,
+            "position": [
+                336,
+                1520
+            ],
+            "id": "d1465d5f-9e88-474e-8367-c16ed700775e",
+            "name": "Sort RSS By PublishDate",
+            "onError": "continueRegularOutput"
+        }
+    ],
+    "connections": {
+        "Analyze video": {
+            "main": [
+                [
+                    {
+                        "node": "Parse YouTube Summary",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Aggregate": {
+            "main": [
+                [
+                    {
+                        "node": "Send a message",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Edit Fields": {
+            "main": [
+                [
+                    {
+                        "node": "Analyze video",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Loop Over Items1": {
+            "main": [
+                [
+                    {
+                        "node": "Aggregate",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Edit Fields",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Wait After Slack": {
+            "main": [
+                [
+                    {
+                        "node": "Loop Over Items1",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Parse YouTube Summary": {
+            "main": [
+                [
+                    {
+                        "node": "HTTP Request",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Get Video Stats1": {
+            "main": [
+                [
+                    {
+                        "node": "Filter Shorts & Low Perf",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Filter Shorts & Low Perf": {
+            "main": [
+                [
+                    {
+                        "node": "Limit Top 5 Videos",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Limit Top 5 Videos": {
+            "main": [
+                [
+                    {
+                        "node": "Loop Over Items1",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "HTTP Request": {
+            "main": [
+                [
+                    {
+                        "node": "HTTP Request1",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "HTTP Request1": {
+            "main": [
+                [
+                    {
+                        "node": "Append row in sheet2",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Append row in sheet2": {
+            "main": [
+                [
+                    {
+                        "node": "Wait After Slack",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Get Channels2": {
+            "main": [
+                [
+                    {
+                        "node": "Loop Over Items",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Loop Over Items": {
+            "main": [
+                [
+                    {
+                        "node": "Sort RSS By PublishDate",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "RSS Feed2",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "config": {
+            "main": [
+                [
+                    {
+                        "node": "Get Channels2",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Get Existing Videos1",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "When clicking ‘Execute workflow’": {
+            "main": [
+                [
+                    {
+                        "node": "config",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "RSS Feed2": {
+            "main": [
+                [
+                    {
+                        "node": "Loop Over Items",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Limit RSS Top 11": {
+            "main": [
+                [
+                    {
+                        "node": "Get Video Stats1",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Get Existing Videos1": {
+            "main": [
+                [
+                    {
+                        "node": "Extract Existing IDs1",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Extract Existing IDs1": {
+            "main": [
+                [
+                    {
+                        "node": "Filter New Videos Only1",
+                        "type": "main",
+                        "index": 1
+                    }
+                ]
+            ]
+        },
+        "Filter New Videos Only1": {
+            "main": [
+                [
+                    {
+                        "node": "Limit RSS Top 11",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "parse Json": {
+            "main": [
+                [
+                    {
+                        "node": "Filter New Videos Only1",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Sort RSS By PublishDate": {
+            "main": [
+                [
+                    {
+                        "node": "parse Json",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "pinData": {},
+    "meta": {
+        "templateCredsSetupCompleted": true,
+        "instanceId": "2059fc2fec68403f2ebdd333a847080bff0ccba3691f3533cf85f722b39eb134"
+    }
+}
