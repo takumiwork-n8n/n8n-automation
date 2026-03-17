@@ -1,0 +1,21 @@
+name: Deploy n8n Workflows
+on:
+  push:
+    paths: ['workflows/*.json']
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Import workflows to n8n
+        env:
+          N8N_URL: ${{ secrets.N8N_URL }}
+          N8N_KEY: ${{ secrets.N8N_API_KEY }}
+        run: |
+          for json in workflows/*.json; do
+            curl -s -X POST "$N8N_URL/api/v1/workflows" \
+              -H "X-N8N-API-KEY: $N8N_KEY" \
+              -H "Content-Type: application/json" \
+              --data-binary "@$json"
+            echo "Deployed: $json"
+          done
