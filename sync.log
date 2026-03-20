@@ -1,0 +1,23 @@
+[main b84b33a] auto sync: 2026-03-20 09:00
+ Committer: takumi nozawa <takuminozawa@tkmMacBook-Air.local>
+Your name and email address were configured automatically based
+on your username and hostname. Please check that they are accurate.
+You can suppress this message by setting them explicitly. Run the
+following command and follow the instructions in your editor to edit
+your configuration file:
+
+    git config --global --edit
+
+After doing this, you may fix the identity used for this commit with:
+
+    git commit --amend --reset-author
+
+ 7 files changed, 592 insertions(+), 943 deletions(-)
+ create mode 100644 workflows/.DS_Store
+ create mode 100644 workflows/Instagram_persona_research.json
+ create mode 100644 workflows/Instagram_persona_research_v2.json
+ delete mode 100644 workflows/Integrated Trend Collector v4.json
+ create mode 100644 workflows/monitor_mother/.DS_Store
+ create mode 100644 "workflows/monitor_mother/reference/\346\267\273\345\211\212\345\211\215.docx"
+ create mode 100644 "workflows/monitor_mother/reference/\346\267\273\345\211\212\345\276\214.docx"
+fatal: could not read Username for 'https://github.com': Device not configured

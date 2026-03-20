@@ -1,14 +1,11 @@
 {
-    "name": "Instagram Persona Research v2 (Daily 2AM)",
     "nodes": [
         {
             "parameters": {
                 "rule": {
                     "interval": [
                         {
-                            "hoursInterval": 24,
-                            "triggerAtHour": 2,
-                            "triggerAtMinute": 0
+                            "field": "weeks"
                         }
                     ]
                 }
@@ -16,100 +13,130 @@
             "name": "Cron 毎日2:00",
             "type": "n8n-nodes-base.scheduleTrigger",
             "typeVersion": 1.3,
-            "position": [0, 160]
+            "position": [
+                992,
+                1328
+            ],
+            "id": "71aeda3b-41fd-43ec-814f-876efae2f221"
         },
         {
             "parameters": {
                 "operation": "getAll",
                 "tableId": "posts",
-                "returnAll": false,
-                "limit": 30
+                "limit": 10,
+                "filterType": "string",
+                "filterString": "order=created_at.desc"
             },
             "name": "Supabase: 投稿取得",
             "type": "n8n-nodes-base.supabase",
             "typeVersion": 1,
-            "position": [260, 0],
+            "position": [
+                1376,
+                1152
+            ],
+            "id": "7cd1a206-bf5b-485c-be4b-fa80645455f8",
+            "credentials": {
+                "supabaseApi": {
+                    "id": "HssN1EvkYvwpUoeg",
+                    "name": "Supabase_Insta_dashboard"
+                }
+            },
             "onError": "continueRegularOutput"
         },
         {
             "parameters": {
                 "operation": "getAll",
                 "tableId": "metrics",
-                "returnAll": false,
-                "limit": 30
+                "returnAll": true,
+                "filterType": "none"
             },
             "name": "Supabase: メトリクス取得",
             "type": "n8n-nodes-base.supabase",
             "typeVersion": 1,
-            "position": [260, 160],
-            "onError": "continueRegularOutput"
-        },
-        {
-            "parameters": {
-                "method": "GET",
-                "url": "=https://graph.facebook.com/v21.0/{{ $env.INSTAGRAM_ACCOUNT_ID }}/insights?metric=follower_demographics&period=lifetime&breakdown=age,gender,country&access_token={{ $env.INSTAGRAM_ACCESS_TOKEN }}",
-                "options": {
-                    "response": {
-                        "response": {
-                            "neverError": true
-                        }
-                    }
+            "position": [
+                1376,
+                1328
+            ],
+            "id": "f13bf6fa-af6d-44a1-a118-a2a536382400",
+            "credentials": {
+                "supabaseApi": {
+                    "id": "HssN1EvkYvwpUoeg",
+                    "name": "Supabase_Insta_dashboard"
                 }
             },
-            "name": "Instagram: フォロワー属性取得",
-            "type": "n8n-nodes-base.httpRequest",
-            "typeVersion": 4.4,
-            "position": [260, 320],
             "onError": "continueRegularOutput"
         },
         {
             "parameters": {
-                "mode": "append",
-                "numberInputs": 3
+                "mode": "combine",
+                "fieldsToMatchString": "post_id",
+                "options": {}
             },
             "name": "データをマージ",
             "type": "n8n-nodes-base.merge",
             "typeVersion": 3.2,
-            "position": [520, 160]
+            "position": [
+                1840,
+                1312
+            ],
+            "id": "b009f590-416f-4638-b577-e9260fd85016"
         },
         {
             "parameters": {
                 "promptType": "define",
-                "text": "=あなたはInstagramマーケティングの専門家です。\n以下のデータを分析して、このアカウントのフォロワーのペルソナと、そのペルソナに刺さる投稿ネタを5件提案してください。\n\n## 投稿データ（直近30件）\n{{ JSON.stringify($('Supabase: 投稿取得').all().map(i => i.json), null, 2) }}\n\n## メトリクスデータ\n{{ JSON.stringify($('Supabase: メトリクス取得').all().map(i => i.json), null, 2) }}\n\n## フォロワー属性\n{{ JSON.stringify($('Instagram: フォロワー属性取得').first().json, null, 2) }}\n\n## 出力形式（必ずこのJSONのみ出力）\n{\n  \"persona\": {\n    \"age_range\": \"25〜35歳\",\n    \"occupation\": \"会社員・副業希望\",\n    \"pain_points\": [\"時間がない\", \"稼ぎ方がわからない\"],\n    \"desires\": [\"月5万の副収入\", \"自由な時間\"],\n    \"behavior_pattern\": \"平日夜と休日昼にSNSをチェック。具体的なHow-toコンテンツを好む。\"\n  },\n  \"topics\": [\n    {\n      \"topic\": \"AIツールで副業収入を3倍にした方法\",\n      \"reason\": \"ペルソナの悩みに直結し、具体的な数字が刺さる\"\n    }\n  ]\n}"
+                "text": "=以下のInstagramアカウントの投稿パフォーマンスデータを分析してください。\n投稿数: {{ $json.data.length }}件\n\n## 投稿データ\n{{ JSON.stringify($('データをマージ').all().map(i => i.json), null, 2) }}",
+                "hasOutputParser": true,
+                "messages": {
+                    "messageValues": [
+                        {
+                            "message": "=あなたはInstagramアカウントのデータアナリストです。\n\n## タスク\n提供される投稿パフォーマンスデータを分析し、フォロワーのペルソナ仮説とコンテンツ提案を出力します。\n\n## データの特性と制約\n- このデータはエンゲージメント（like/comment）がほぼゼロの初期アカウントです\n- like_count, comments_count, followsはすべて0に近いため、ペルソナ推定の根拠にしないこと\n- 代わりに以下の指標の「相対差」を根拠として使用すること：\n  - reach（露出数）：アルゴリズムがどのコンテンツを評価したか\n  - saved（保存数）：ユーザーが「後で見返したい」と判断したか\n  - engagement_rate（エンゲージメント率）：reach対比の反応効率\n  - profile_visits（プロフ訪問数）：フォロー検討の兆候\n  - caption内のハッシュタグとトピックの傾向\n\n## 分析手順\n1. reach上位3投稿とsaved上位3投稿を特定し、共通するトピック・表現パターンを抽出\n2. reach下位の投稿との差分から「反応しなかったもの」の特徴を推定\n3. 上記パターンからペルソナ仮説を構築（根拠の確信度をhigh/medium/lowで明示）\n4. ペルソナに基づき投稿ネタ5件を提案（各提案にデータ根拠を紐付け）\n\n## 出力ルール\n- 以下のJSON形式のみを出力すること。JSON以外のテキストは一切含めないこと\n- 推測で値を埋めず、データから言えないことは\"データ不足\"と明記すること\n\n{\n  \"analysis_summary\": {\n    \"top_reach_posts\": [\"post_idを最大3つ\"],\n    \"top_saved_posts\": [\"post_idを最大3つ\"],\n    \"common_pattern\": \"上位投稿に共通するトピック・表現の特徴\"\n  },\n  \"persona\": {\n    \"age_range\": {\"value\": \"推定値\", \"confidence\": \"high/medium/low\"},\n    \"occupation\": {\"value\": \"推定値\", \"confidence\": \"high/medium/low\"},\n    \"pain_points\": [\n      {\"value\": \"課題\", \"evidence\": \"どのデータからの推定か\"}\n    ],\n    \"desires\": [\n      {\"value\": \"願望\", \"evidence\": \"どのデータからの推定か\"}\n    ],\n    \"behavior_pattern\": {\"value\": \"行動傾向\", \"confidence\": \"high/medium/low\"}\n  },\n  \"topics\": [\n    {\n      \"topic\": \"投稿タイトル案\",\n      \"reason\": \"データ根拠を具体的に記述\",\n      \"target_metric\": \"この投稿で改善を狙う指標（reach/saved/follows）\"\n    }\n  ]\n}"
+                        }
+                    ]
+                },
+                "batching": {}
             },
             "name": "Gemini: ペルソナ＋ネタ生成",
             "type": "@n8n/n8n-nodes-langchain.chainLlm",
             "typeVersion": 1.9,
-            "position": [740, 160],
+            "position": [
+                2208,
+                1312
+            ],
+            "id": "92ab6467-20c3-4f93-9f96-40c546d4a784",
             "onError": "continueRegularOutput"
         },
         {
             "parameters": {
-                "modelName": "models/gemini-2.0-flash"
+                "modelName": "models/gemini-3-flash-preview",
+                "options": {}
             },
             "name": "Google Gemini Chat Model",
             "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
             "typeVersion": 1,
-            "position": [620, 380]
+            "position": [
+                2208,
+                1504
+            ],
+            "id": "c8ffdc71-3a31-4b25-90f9-cc80ec82859d",
+            "credentials": {
+                "googlePalmApi": {
+                    "id": "aYlcpx81lbjQfwmb",
+                    "name": "Google Gemini(PaLM) Api account"
+                }
+            }
         },
         {
             "parameters": {
-                "schemaType": "fromJson",
-                "jsonSchemaExample": "{\n  \"persona\": {\n    \"age_range\": \"25〜35歳\",\n    \"occupation\": \"会社員・副業希望\",\n    \"pain_points\": [\"時間がない\"],\n    \"desires\": [\"月5万の副収入\"],\n    \"behavior_pattern\": \"平日夜にSNSをチェック\"\n  },\n  \"topics\": [\n    {\n      \"topic\": \"AIツールで副業収入を3倍にした方法\",\n      \"reason\": \"ペルソナの悩みに直結\"\n    }\n  ]\n}"
+                "jsonSchemaExample": "{\n  \"analysis_summary\": {\n    \"top_reach_posts\": [\"post_idを最大3つ\"],\n    \"top_saved_posts\": [\"post_idを最大3つ\"],\n    \"common_pattern\": \"上位投稿に共通するトピック・表現の特徴\"\n  },\n  \"persona\": {\n    \"age_range\": {\"value\": \"推定値\", \"confidence\": \"high/medium/low\"},\n    \"occupation\": {\"value\": \"推定値\", \"confidence\": \"high/medium/low\"},\n    \"pain_points\": [\n      {\"value\": \"課題\", \"evidence\": \"どのデータからの推定か\"}\n    ],\n    \"desires\": [\n      {\"value\": \"願望\", \"evidence\": \"どのデータからの推定か\"}\n    ],\n    \"behavior_pattern\": {\"value\": \"行動傾向\", \"confidence\": \"high/medium/low\"}\n  },\n  \"topics\": [\n    {\n      \"topic\": \"投稿タイトル案\",\n      \"reason\": \"データ根拠を具体的に記述\",\n      \"target_metric\": \"この投稿で改善を狙う指標（reach/saved/follows）\"\n    }\n  ]\n}"
             },
             "name": "Structured Output Parser",
             "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
             "typeVersion": 1.3,
-            "position": [860, 380]
-        },
-        {
-            "parameters": {
-                "jsCode": "const raw = $input.first().json;\nlet parsed;\nif (raw.output && typeof raw.output === 'object') {\n  parsed = raw.output;\n} else {\n  const text = raw.text ?? raw.output ?? JSON.stringify(raw);\n  parsed = typeof text === 'string' ? JSON.parse(text) : text;\n}\nreturn parsed.topics.map(t => ({\n  json: {\n    topic: t.topic,\n    reason: t.reason,\n    persona: parsed.persona\n  }\n}));"
-            },
-            "name": "ネタをループ用に分割",
-            "type": "n8n-nodes-base.code",
-            "typeVersion": 2,
-            "position": [960, 160]
+            "position": [
+                2352,
+                1504
+            ],
+            "id": "9113d437-61d0-4641-923b-9a6d7f1b5954"
         },
         {
             "parameters": {
@@ -117,81 +144,411 @@
                 "messages": {
                     "message": [
                         {
-                            "role": "user",
-                            "content": "={{ 'Instagram投稿のネタリサーチ: ' + $json.topic + '\\n\\nこのテーマについて、副業・AI自動化に興味を持つ日本人向けの最新情報を調査してください。具体的な数字・事例・使えるデータを中心にまとめてください。' }}"
+                            "content": "=あなたはInstagramコンテンツ制作のためのリサーチアシスタントです。\n\n## タスク\n指定された投稿テーマについて、以下の3カテゴリで情報を収集してください。\n\n1. 統計・データ：テーマに関連する具体的な数値や調査結果（出典付き）\n2. トレンド：直近の関連ニュース、新サービス、話題の事例\n3. 競合の切り口：同テーマでSNSやブログで反応が良いコンテンツの表現パターン\n\n## 出力ルール\n- 必ず以下のJSON形式のみで出力すること。JSON以外のテキストは含めないこと\n- 各項目に出典URLまたはソース名を必ず付けること\n- 見つからなかった項目は空配列にすること。情報を捏造しないこと\n\n{\n  \"topic\": \"リサーチ対象トピック\",\n  \"stats\": [\n    {\"fact\": \"具体的な数値データ\", \"source\": \"出典\", \"usable_hook\": \"投稿のフック文での使い方\"}\n  ],\n  \"trends\": [\n    {\"title\": \"トレンド概要\", \"date\": \"時期\", \"source\": \"出典\", \"angle\": \"投稿での活用切り口\"}\n  ],\n  \"competitor_patterns\": [\n    {\"pattern\": \"反応が良いパターン\", \"example\": \"具体例\", \"applicable_tip\": \"自分の投稿への取り入れ方\"}\n  ]\n}\n\n",
+                            "role": "system"
+                        },
+                        {
+                            "content": "=以下の投稿テーマについてリサーチしてください。\n\n## 投稿テーマ\n{{ $json['output.topics'].topic }}\n\n## この投稿を作る理由\n{{ $json['output.topics'].reason }}\n\n## 改善を狙う指標\n{{ $json['output.topics'].target_metric }}\n\n## ターゲットペルソナ\n- 年齢層: {{ $json['output.persona'].age_range.value }}\n- 職業: {{ $json['output.persona'].occupation.value }}\n- 悩み: {{ $json['output.persona'].pain_points[0].value }}, {{ $json['output.persona'].pain_points[1].value }}\n- 願望: {{ $json['output.persona'].desires[0].value }}, {{ $json['output.persona'].desires[1].value }}\n- 行動パターン: {{ $json['output.persona'].behavior_pattern.value }}"
                         }
                     ]
                 },
-                "simplify": false
+                "simplify": true,
+                "options": {
+                    "searchRecency": "month"
+                },
+                "requestOptions": {}
             },
             "name": "Perplexity: ネタリサーチ",
             "type": "n8n-nodes-base.perplexity",
             "typeVersion": 1,
-            "position": [1180, 160],
+            "position": [
+                3216,
+                1472
+            ],
+            "id": "485be511-b55e-4bf5-98b5-fc5eb12af274",
+            "credentials": {
+                "perplexityApi": {
+                    "id": "4JcXdv276amBEfY6",
+                    "name": "Perplexity account"
+                }
+            },
             "onError": "continueRegularOutput"
         },
         {
             "parameters": {
-                "jsCode": "const perplexityItems = $input.all();\nconst topicItems = $('ネタをループ用に分割').all();\n\nconst topics = perplexityItems.map((item, i) => {\n  const topicData = topicItems[i]?.json ?? {};\n  const content = (item.json.choices ?? [])[0]?.message?.content ?? '';\n  const citations = item.json.citations ?? [];\n  return {\n    topic: topicData.topic ?? '',\n    reason: topicData.reason ?? '',\n    research_summary: content,\n    sources: citations\n  };\n});\n\nreturn [{\n  json: {\n    persona: topicItems[0]?.json?.persona ?? {},\n    topics,\n    post_count: 30\n  }\n}];"
+                "jsCode": "// Run Once for All Items モードで使用\n// このノードは「Perplexityリサーチ結果」の後に配置すること\n\nconst items = $input.all(); // Perplexityのリサーチ結果（1アイテム=1トピック）\n\n// Geminiノードからペルソナと元のトピックを取得\nconst geminiOutput = $node[\"Gemini: ペルソナ＋ネタ生成\"].json.output;\nconst rawPersona = geminiOutput.persona;\n\n// persona を Supabase 型（文字列フラット）に変換\nconst persona = {\n  age_range: rawPersona.age_range.value,\n  occupation: rawPersona.occupation.value,\n  pain_points: rawPersona.pain_points.map(p => p.value),\n  desires: rawPersona.desires.map(d => d.value),\n  behavior_pattern: rawPersona.behavior_pattern.value\n};\n\n// Perplexityのリサーチ結果を ResearchedTopic 形式に変換\nconst topics = items.map(item => {\n  const d = item.json;\n\n  const statsSummary = (d.stats || [])\n    .map(s => `・${s.fact}`)\n    .join('\\n');\n\n  const trendsSummary = (d.trends || [])\n    .map(t => `・${t.title}`)\n    .join('\\n');\n\n  const research_summary = [statsSummary, trendsSummary]\n    .filter(s => s.length > 0)\n    .join('\\n');\n\n  // Geminiが生成したtopicsからreason/target_metricを引き当て\n  const geminiTopic = (geminiOutput.topics || [])\n    .find(t => t.topic === d.topic) || {};\n\n  return {\n    topic: d.topic,\n    reason: geminiTopic.reason || d.competitor_patterns?.[0]?.applicable_tip || '',\n    research_summary,\n    sources: d.citations || []\n  };\n});\n\nreturn [{\n  json: {\n    user_id: \"5659d84b-24d9-4978-ad06-90e6c046b413\", // 認証ノードから取得する場合は差し替え\n    persona,\n    topics,\n    post_count: $node[\"Gemini: ペルソナ＋ネタ生成\"].json.output.analysis_summary?.top_reach_posts?.length || 0,\n    analyzed_at: new Date().toISOString()\n  }\n}];"
             },
             "name": "結果をまとめる",
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
-            "position": [1400, 160]
+            "position": [
+                3152,
+                1296
+            ],
+            "id": "0dee1e75-4062-4794-8cee-09d7a2c8d46e"
         },
         {
             "parameters": {
-                "method": "POST",
-                "url": "={{ $env.DASHBOARD_URL }}/api/persona-research",
-                "sendHeaders": true,
-                "headerParameters": {
-                    "parameters": [
+                "assignments": {
+                    "assignments": [
                         {
-                            "name": "Authorization",
-                            "value": "Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+                            "id": "0a0493d6-cee3-437b-9900-771fb86082cf",
+                            "name": "post_id",
+                            "value": "={{ $json.id }}",
+                            "type": "string"
                         },
                         {
-                            "name": "Content-Type",
-                            "value": "application/json"
+                            "id": "ff02c0b0-c8c0-4a5e-abe7-00c864cee5a0",
+                            "name": "caption",
+                            "value": "={{ $json.caption }}",
+                            "type": "string"
+                        },
+                        {
+                            "id": "ab759e3d-960b-4cf1-8052-534e5790e5bc",
+                            "name": "posted_at",
+                            "value": "={{ $json.posted_at }}",
+                            "type": "string"
                         }
                     ]
                 },
-                "sendBody": true,
-                "contentType": "json",
-                "body": {
-                    "user_id": "={{ $env.INSTAGRAM_USER_ID }}",
-                    "persona": "={{ JSON.stringify($json.persona) }}",
-                    "topics": "={{ JSON.stringify($json.topics) }}",
-                    "post_count": "={{ $json.post_count }}",
-                    "analyzed_at": "={{ new Date().toISOString() }}"
+                "options": {}
+            },
+            "type": "n8n-nodes-base.set",
+            "typeVersion": 3.4,
+            "position": [
+                1568,
+                1152
+            ],
+            "id": "c1042659-f9b4-488b-a2ad-819018aad2dc",
+            "name": "Edit Fields1"
+        },
+        {
+            "parameters": {
+                "compare": "selectedFields",
+                "fieldsToCompare": "post_id",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.removeDuplicates",
+            "typeVersion": 2,
+            "position": [
+                1568,
+                1328
+            ],
+            "id": "ebefde69-31fa-4fc3-a8af-5cc90763d16a",
+            "name": "Remove Duplicates"
+        },
+        {
+            "parameters": {
+                "aggregate": "aggregateAllItemData",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.aggregate",
+            "typeVersion": 1,
+            "position": [
+                2016,
+                1312
+            ],
+            "id": "a52cdd7d-94ca-4a58-a854-652a68b972a7",
+            "name": "Aggregate"
+        },
+        {
+            "parameters": {
+                "options": {
+                    "reset": false
                 }
             },
-            "name": "Dashboard API: 保存",
-            "type": "n8n-nodes-base.httpRequest",
-            "typeVersion": 4.4,
-            "position": [1620, 160],
-            "onError": "continueRegularOutput"
+            "type": "n8n-nodes-base.splitInBatches",
+            "typeVersion": 3,
+            "position": [
+                2944,
+                1312
+            ],
+            "id": "d9ba679b-19dc-4d68-8db2-8b2fe98a6f26",
+            "name": "Loop Over Items"
+        },
+        {
+            "parameters": {
+                "fieldToSplitOut": "output.topics",
+                "include": "selectedOtherFields",
+                "fieldsToInclude": "output.persona",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.splitOut",
+            "typeVersion": 1,
+            "position": [
+                2544,
+                1312
+            ],
+            "id": "857bfc83-b5aa-457c-b590-ed6d03b1a8d7",
+            "name": "Split Out"
+        },
+        {
+            "parameters": {
+                "jsCode": "const raw = $input.first().json;\nconst currentItem = $('Loop Over Items').first().json; // 現在のバッチアイテム\n\nconst text = raw.message ?? raw.choices?.[0]?.message?.content ?? JSON.stringify(raw);\nconst jsonMatch = text.match(/```json\\s*([\\s\\S]*?)```/) || text.match(/(\\{[\\s\\S]*\\})/);\n\nlet parsed;\ntry {\n  parsed = JSON.parse(jsonMatch ? jsonMatch[1].trim() : text);\n} catch (e) {\n  return [{\n    json: {\n      parse_error: true,\n      raw_text: text,\n      topic: currentItem.topic ?? 'unknown',\n      reason: currentItem.reason ?? '',\n      target_metric: currentItem.target_metric ?? ''\n    }\n  }];\n}\n\nparsed.citations = raw.citations ?? [];\n// 元のトピック情報をマージ\nparsed._original = {\n  topic: currentItem.topic ?? '',\n  reason: currentItem.reason ?? '',\n  target_metric: currentItem.target_metric ?? ''\n};\n\nreturn [{ json: parsed }];"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                3408,
+                1472
+            ],
+            "id": "166cc057-e6d1-4334-8781-59077d4be959",
+            "name": "Code in JavaScript"
+        },
+        {
+            "parameters": {
+                "maxItems": 2
+            },
+            "type": "n8n-nodes-base.limit",
+            "typeVersion": 1,
+            "position": [
+                2736,
+                1312
+            ],
+            "id": "09664980-1a44-4a49-9f11-5f0c5ba99a6e",
+            "name": "Limit"
+        },
+        {
+            "parameters": {
+                "tableId": "persona_insights",
+                "fieldsUi": {
+                    "fieldValues": [
+                        {
+                            "fieldId": "user_id",
+                            "fieldValue": "={{ $json.user_id }}"
+                        },
+                        {
+                            "fieldId": "persona",
+                            "fieldValue": "={{ $json.persona }}"
+                        },
+                        {
+                            "fieldId": "topics",
+                            "fieldValue": "={{ $json.topics }}"
+                        },
+                        {
+                            "fieldId": "post_count",
+                            "fieldValue": "={{ $json.post_count }}"
+                        },
+                        {
+                            "fieldId": "analyzed_at",
+                            "fieldValue": "={{ $json.analyzed_at }}"
+                        },
+                        {
+                            "fieldId": "created_at",
+                            "fieldValue": "={{ $now }}"
+                        }
+                    ]
+                }
+            },
+            "type": "n8n-nodes-base.supabase",
+            "typeVersion": 1,
+            "position": [
+                3408,
+                1296
+            ],
+            "id": "a088e8ce-0b29-49df-896a-211b87fabb29",
+            "name": "Create a row",
+            "credentials": {
+                "supabaseApi": {
+                    "id": "HssN1EvkYvwpUoeg",
+                    "name": "Supabase_Insta_dashboard"
+                }
+            }
         }
     ],
     "connections": {
         "Cron 毎日2:00": {
             "main": [
                 [
-                    { "node": "Supabase: 投稿取得", "type": "main", "index": 0 },
-                    { "node": "Supabase: メトリクス取得", "type": "main", "index": 0 },
-                    { "node": "Instagram: フォロワー属性取得", "type": "main", "index": 0 }
+                    {
+                        "node": "Supabase: 投稿取得",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Supabase: メトリクス取得",
+                        "type": "main",
+                        "index": 0
+                    }
                 ]
             ]
         },
-        "Supabase: 投稿取得": { "main": [[{ "node": "データをマージ", "type": "main", "index": 0 }]] },
-        "Supabase: メトリクス取得": { "main": [[{ "node": "データをマージ", "type": "main", "index": 1 }]] },
-        "Instagram: フォロワー属性取得": { "main": [[{ "node": "データをマージ", "type": "main", "index": 2 }]] },
-        "データをマージ": { "main": [[{ "node": "Gemini: ペルソナ＋ネタ生成", "type": "main", "index": 0 }]] },
-        "Google Gemini Chat Model": { "ai_languageModel": [[{ "node": "Gemini: ペルソナ＋ネタ生成", "type": "ai_languageModel", "index": 0 }]] },
-        "Structured Output Parser": { "ai_outputParser": [[{ "node": "Gemini: ペルソナ＋ネタ生成", "type": "ai_outputParser", "index": 0 }]] },
-        "Gemini: ペルソナ＋ネタ生成": { "main": [[{ "node": "ネタをループ用に分割", "type": "main", "index": 0 }]] },
-        "ネタをループ用に分割": { "main": [[{ "node": "Perplexity: ネタリサーチ", "type": "main", "index": 0 }]] },
-        "Perplexity: ネタリサーチ": { "main": [[{ "node": "結果をまとめる", "type": "main", "index": 0 }]] },
-        "結果をまとめる": { "main": [[{ "node": "Dashboard API: 保存", "type": "main", "index": 0 }]] }
+        "Supabase: 投稿取得": {
+            "main": [
+                [
+                    {
+                        "node": "Edit Fields1",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Supabase: メトリクス取得": {
+            "main": [
+                [
+                    {
+                        "node": "Remove Duplicates",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "データをマージ": {
+            "main": [
+                [
+                    {
+                        "node": "Aggregate",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Gemini: ペルソナ＋ネタ生成": {
+            "main": [
+                [
+                    {
+                        "node": "Split Out",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Google Gemini Chat Model": {
+            "ai_languageModel": [
+                [
+                    {
+                        "node": "Gemini: ペルソナ＋ネタ生成",
+                        "type": "ai_languageModel",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Structured Output Parser": {
+            "ai_outputParser": [
+                [
+                    {
+                        "node": "Gemini: ペルソナ＋ネタ生成",
+                        "type": "ai_outputParser",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Perplexity: ネタリサーチ": {
+            "main": [
+                [
+                    {
+                        "node": "Code in JavaScript",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "結果をまとめる": {
+            "main": [
+                [
+                    {
+                        "node": "Create a row",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Edit Fields1": {
+            "main": [
+                [
+                    {
+                        "node": "データをマージ",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Remove Duplicates": {
+            "main": [
+                [
+                    {
+                        "node": "データをマージ",
+                        "type": "main",
+                        "index": 1
+                    }
+                ]
+            ]
+        },
+        "Aggregate": {
+            "main": [
+                [
+                    {
+                        "node": "Gemini: ペルソナ＋ネタ生成",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Loop Over Items": {
+            "main": [
+                [
+                    {
+                        "node": "結果をまとめる",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Perplexity: ネタリサーチ",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Split Out": {
+            "main": [
+                [
+                    {
+                        "node": "Limit",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Code in JavaScript": {
+            "main": [
+                [
+                    {
+                        "node": "Loop Over Items",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Limit": {
+            "main": [
+                [
+                    {
+                        "node": "Loop Over Items",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "pinData": {},
+    "meta": {
+        "templateCredsSetupCompleted": true,
+        "instanceId": "2059fc2fec68403f2ebdd333a847080bff0ccba3691f3533cf85f722b39eb134"
     }
 }
