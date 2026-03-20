@@ -1,0 +1,197 @@
+{
+    "name": "Instagram Persona Research v2 (Daily 2AM)",
+    "nodes": [
+        {
+            "parameters": {
+                "rule": {
+                    "interval": [
+                        {
+                            "hoursInterval": 24,
+                            "triggerAtHour": 2,
+                            "triggerAtMinute": 0
+                        }
+                    ]
+                }
+            },
+            "name": "Cron 毎日2:00",
+            "type": "n8n-nodes-base.scheduleTrigger",
+            "typeVersion": 1.3,
+            "position": [0, 160]
+        },
+        {
+            "parameters": {
+                "operation": "getAll",
+                "tableId": "posts",
+                "returnAll": false,
+                "limit": 30
+            },
+            "name": "Supabase: 投稿取得",
+            "type": "n8n-nodes-base.supabase",
+            "typeVersion": 1,
+            "position": [260, 0],
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "operation": "getAll",
+                "tableId": "metrics",
+                "returnAll": false,
+                "limit": 30
+            },
+            "name": "Supabase: メトリクス取得",
+            "type": "n8n-nodes-base.supabase",
+            "typeVersion": 1,
+            "position": [260, 160],
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "method": "GET",
+                "url": "=https://graph.facebook.com/v21.0/{{ $env.INSTAGRAM_ACCOUNT_ID }}/insights?metric=follower_demographics&period=lifetime&breakdown=age,gender,country&access_token={{ $env.INSTAGRAM_ACCESS_TOKEN }}",
+                "options": {
+                    "response": {
+                        "response": {
+                            "neverError": true
+                        }
+                    }
+                }
+            },
+            "name": "Instagram: フォロワー属性取得",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.4,
+            "position": [260, 320],
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "mode": "append",
+                "numberInputs": 3
+            },
+            "name": "データをマージ",
+            "type": "n8n-nodes-base.merge",
+            "typeVersion": 3.2,
+            "position": [520, 160]
+        },
+        {
+            "parameters": {
+                "promptType": "define",
+                "text": "=あなたはInstagramマーケティングの専門家です。\n以下のデータを分析して、このアカウントのフォロワーのペルソナと、そのペルソナに刺さる投稿ネタを5件提案してください。\n\n## 投稿データ（直近30件）\n{{ JSON.stringify($('Supabase: 投稿取得').all().map(i => i.json), null, 2) }}\n\n## メトリクスデータ\n{{ JSON.stringify($('Supabase: メトリクス取得').all().map(i => i.json), null, 2) }}\n\n## フォロワー属性\n{{ JSON.stringify($('Instagram: フォロワー属性取得').first().json, null, 2) }}\n\n## 出力形式（必ずこのJSONのみ出力）\n{\n  \"persona\": {\n    \"age_range\": \"25〜35歳\",\n    \"occupation\": \"会社員・副業希望\",\n    \"pain_points\": [\"時間がない\", \"稼ぎ方がわからない\"],\n    \"desires\": [\"月5万の副収入\", \"自由な時間\"],\n    \"behavior_pattern\": \"平日夜と休日昼にSNSをチェック。具体的なHow-toコンテンツを好む。\"\n  },\n  \"topics\": [\n    {\n      \"topic\": \"AIツールで副業収入を3倍にした方法\",\n      \"reason\": \"ペルソナの悩みに直結し、具体的な数字が刺さる\"\n    }\n  ]\n}"
+            },
+            "name": "Gemini: ペルソナ＋ネタ生成",
+            "type": "@n8n/n8n-nodes-langchain.chainLlm",
+            "typeVersion": 1.9,
+            "position": [740, 160],
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "modelName": "models/gemini-2.0-flash"
+            },
+            "name": "Google Gemini Chat Model",
+            "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+            "typeVersion": 1,
+            "position": [620, 380]
+        },
+        {
+            "parameters": {
+                "schemaType": "fromJson",
+                "jsonSchemaExample": "{\n  \"persona\": {\n    \"age_range\": \"25〜35歳\",\n    \"occupation\": \"会社員・副業希望\",\n    \"pain_points\": [\"時間がない\"],\n    \"desires\": [\"月5万の副収入\"],\n    \"behavior_pattern\": \"平日夜にSNSをチェック\"\n  },\n  \"topics\": [\n    {\n      \"topic\": \"AIツールで副業収入を3倍にした方法\",\n      \"reason\": \"ペルソナの悩みに直結\"\n    }\n  ]\n}"
+            },
+            "name": "Structured Output Parser",
+            "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+            "typeVersion": 1.3,
+            "position": [860, 380]
+        },
+        {
+            "parameters": {
+                "jsCode": "const raw = $input.first().json;\nlet parsed;\nif (raw.output && typeof raw.output === 'object') {\n  parsed = raw.output;\n} else {\n  const text = raw.text ?? raw.output ?? JSON.stringify(raw);\n  parsed = typeof text === 'string' ? JSON.parse(text) : text;\n}\nreturn parsed.topics.map(t => ({\n  json: {\n    topic: t.topic,\n    reason: t.reason,\n    persona: parsed.persona\n  }\n}));"
+            },
+            "name": "ネタをループ用に分割",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [960, 160]
+        },
+        {
+            "parameters": {
+                "model": "sonar-pro",
+                "messages": {
+                    "message": [
+                        {
+                            "role": "user",
+                            "content": "={{ 'Instagram投稿のネタリサーチ: ' + $json.topic + '\\n\\nこのテーマについて、副業・AI自動化に興味を持つ日本人向けの最新情報を調査してください。具体的な数字・事例・使えるデータを中心にまとめてください。' }}"
+                        }
+                    ]
+                },
+                "simplify": false
+            },
+            "name": "Perplexity: ネタリサーチ",
+            "type": "n8n-nodes-base.perplexity",
+            "typeVersion": 1,
+            "position": [1180, 160],
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "jsCode": "const perplexityItems = $input.all();\nconst topicItems = $('ネタをループ用に分割').all();\n\nconst topics = perplexityItems.map((item, i) => {\n  const topicData = topicItems[i]?.json ?? {};\n  const content = (item.json.choices ?? [])[0]?.message?.content ?? '';\n  const citations = item.json.citations ?? [];\n  return {\n    topic: topicData.topic ?? '',\n    reason: topicData.reason ?? '',\n    research_summary: content,\n    sources: citations\n  };\n});\n\nreturn [{\n  json: {\n    persona: topicItems[0]?.json?.persona ?? {},\n    topics,\n    post_count: 30\n  }\n}];"
+            },
+            "name": "結果をまとめる",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [1400, 160]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ $env.DASHBOARD_URL }}/api/persona-research",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "Authorization",
+                            "value": "Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+                        },
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "contentType": "json",
+                "body": {
+                    "user_id": "={{ $env.INSTAGRAM_USER_ID }}",
+                    "persona": "={{ JSON.stringify($json.persona) }}",
+                    "topics": "={{ JSON.stringify($json.topics) }}",
+                    "post_count": "={{ $json.post_count }}",
+                    "analyzed_at": "={{ new Date().toISOString() }}"
+                }
+            },
+            "name": "Dashboard API: 保存",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.4,
+            "position": [1620, 160],
+            "onError": "continueRegularOutput"
+        }
+    ],
+    "connections": {
+        "Cron 毎日2:00": {
+            "main": [
+                [
+                    { "node": "Supabase: 投稿取得", "type": "main", "index": 0 },
+                    { "node": "Supabase: メトリクス取得", "type": "main", "index": 0 },
+                    { "node": "Instagram: フォロワー属性取得", "type": "main", "index": 0 }
+                ]
+            ]
+        },
+        "Supabase: 投稿取得": { "main": [[{ "node": "データをマージ", "type": "main", "index": 0 }]] },
+        "Supabase: メトリクス取得": { "main": [[{ "node": "データをマージ", "type": "main", "index": 1 }]] },
+        "Instagram: フォロワー属性取得": { "main": [[{ "node": "データをマージ", "type": "main", "index": 2 }]] },
+        "データをマージ": { "main": [[{ "node": "Gemini: ペルソナ＋ネタ生成", "type": "main", "index": 0 }]] },
+        "Google Gemini Chat Model": { "ai_languageModel": [[{ "node": "Gemini: ペルソナ＋ネタ生成", "type": "ai_languageModel", "index": 0 }]] },
+        "Structured Output Parser": { "ai_outputParser": [[{ "node": "Gemini: ペルソナ＋ネタ生成", "type": "ai_outputParser", "index": 0 }]] },
+        "Gemini: ペルソナ＋ネタ生成": { "main": [[{ "node": "ネタをループ用に分割", "type": "main", "index": 0 }]] },
+        "ネタをループ用に分割": { "main": [[{ "node": "Perplexity: ネタリサーチ", "type": "main", "index": 0 }]] },
+        "Perplexity: ネタリサーチ": { "main": [[{ "node": "結果をまとめる", "type": "main", "index": 0 }]] },
+        "結果をまとめる": { "main": [[{ "node": "Dashboard API: 保存", "type": "main", "index": 0 }]] }
+    }
+}

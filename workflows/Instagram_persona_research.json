@@ -1,0 +1,395 @@
+{
+    "name": "Instagram Persona Research (Daily 2AM)",
+    "nodes": [
+        {
+            "parameters": {
+                "rule": {
+                    "interval": [
+                        {
+                            "hoursInterval": 24,
+                            "triggerAtHour": 2,
+                            "triggerAtMinute": 0
+                        }
+                    ]
+                }
+            },
+            "name": "Cron 毎日2:00",
+            "type": "n8n-nodes-base.scheduleTrigger",
+            "typeVersion": 1.2,
+            "position": [
+                0,
+                160
+            ]
+        },
+        {
+            "parameters": {
+                "method": "GET",
+                "url": "={{ $env.SUPABASE_URL }}/rest/v1/posts?select=id,instagram_id,caption,hashtags,media_type,posted_at&order=posted_at.desc&limit=30",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "apikey",
+                            "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+                        },
+                        {
+                            "name": "Authorization",
+                            "value": "Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+                        },
+                        {
+                            "name": "Accept",
+                            "value": "application/json"
+                        }
+                    ]
+                },
+                "options": {
+                    "response": {
+                        "response": {
+                            "neverError": true
+                        }
+                    }
+                }
+            },
+            "name": "Supabase: 投稿取得",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                220,
+                0
+            ]
+        },
+        {
+            "parameters": {
+                "method": "GET",
+                "url": "={{ $env.SUPABASE_URL }}/rest/v1/metrics?select=post_id,reach,impressions,engagement,saves,comments,shares,fetched_at&order=fetched_at.desc&limit=30",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "apikey",
+                            "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+                        },
+                        {
+                            "name": "Authorization",
+                            "value": "Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+                        },
+                        {
+                            "name": "Accept",
+                            "value": "application/json"
+                        }
+                    ]
+                },
+                "options": {
+                    "response": {
+                        "response": {
+                            "neverError": true
+                        }
+                    }
+                }
+            },
+            "name": "Supabase: メトリクス取得",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                220,
+                160
+            ]
+        },
+        {
+            "parameters": {
+                "method": "GET",
+                "url": "=https://graph.facebook.com/v21.0/{{ $env.INSTAGRAM_ACCOUNT_ID }}/insights?metric=follower_demographics&period=lifetime&breakdown=age,gender,country&access_token={{ $env.INSTAGRAM_ACCESS_TOKEN }}",
+                "options": {
+                    "response": {
+                        "response": {
+                            "neverError": true
+                        }
+                    }
+                }
+            },
+            "name": "Instagram: フォロワー属性取得",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                220,
+                320
+            ]
+        },
+        {
+            "parameters": {
+                "mode": "append",
+                "number": 3
+            },
+            "name": "データをマージ",
+            "type": "n8n-nodes-base.merge",
+            "typeVersion": 3,
+            "position": [
+                500,
+                160
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+                "sendQuery": true,
+                "queryParameters": {
+                    "parameters": [
+                        {
+                            "name": "key",
+                            "value": "={{ $env.GEMINI_API_KEY }}"
+                        }
+                    ]
+                },
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "contentType": "json",
+                "body": {
+                    "contents": [
+                        {
+                            "parts": [
+                                {
+                                    "text": "=あなたはInstagramマーケティングの専門家です。\n以下のデータを分析して、このアカウントのフォロワーのペルソナと、そのペルソナに刺さる投稿ネタを5件提案してください。\n\n## 投稿データ（直近30件）\n{{ JSON.stringify($('Supabase: 投稿取得').all().map(i => i.json), null, 2) }}\n\n## メトリクスデータ\n{{ JSON.stringify($('Supabase: メトリクス取得').all().map(i => i.json), null, 2) }}\n\n## フォロワー属性\n{{ JSON.stringify($('Instagram: フォロワー属性取得').first().json, null, 2) }}\n\n## 出力形式（必ずこのJSONのみ出力）\n{\n  \"persona\": {\n    \"age_range\": \"25〜35歳\",\n    \"occupation\": \"会社員・副業希望\",\n    \"pain_points\": [\"時間がない\", \"稼ぎ方がわからない\"],\n    \"desires\": [\"月5万の副収入\", \"自由な時間\"],\n    \"behavior_pattern\": \"平日夜と休日昼にSNSをチェック。具体的なHow-toコンテンツを好む。\"\n  },\n  \"topics\": [\n    {\n      \"topic\": \"AIツールで副業収入を3倍にした方法\",\n      \"reason\": \"ペルソナの悩みに直結し、具体的な数字が刺さる\"\n    }\n  ]\n}"
+                                }
+                            ]
+                        }
+                    ],
+                    "generationConfig": {
+                        "response_mime_type": "application/json"
+                    }
+                }
+            },
+            "name": "Gemini: ペルソナ＋ネタ生成",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                720,
+                160
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "const raw = $input.first().json;\nconst text = raw.candidates[0].content.parts[0].text;\nconst parsed = JSON.parse(text);\nreturn parsed.topics.map(t => ({\n  json: {\n    topic: t.topic,\n    reason: t.reason,\n    persona: parsed.persona\n  }\n}));"
+            },
+            "name": "ネタをループ用に分割",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                940,
+                160
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://api.perplexity.ai/chat/completions",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "Authorization",
+                            "value": "Bearer {{ $env.PERPLEXITY_API_KEY }}"
+                        },
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "contentType": "json",
+                "body": {
+                    "model": "sonar-pro",
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": "={{ 'Instagram投稿のネタリサーチ: ' + $json.topic + '\\n\\nこのテーマについて、副業・AI自動化に興味を持つ日本人向けの最新情報を調査してください。具体的な数字・事例・使えるデータを中心にまとめてください。' }}"
+                        }
+                    ],
+                    "return_citations": true,
+                    "return_related_questions": false
+                },
+                "options": {
+                    "response": {
+                        "response": {
+                            "neverError": true
+                        }
+                    }
+                }
+            },
+            "name": "Perplexity: ネタリサーチ",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                1160,
+                160
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "const items = $input.all();\nconst topics = items.map(item => {\n  const perplexityRes = item.json;\n  const content = (perplexityRes.choices ?? [])[0]?.message?.content ?? '';\n  const citations = perplexityRes.citations ?? [];\n  return {\n    topic: item.json.topic ?? '',\n    reason: item.json.reason ?? '',\n    research_summary: content,\n    sources: citations\n  };\n});\n\nconst firstItem = items[0];\nreturn [{\n  json: {\n    persona: firstItem.json.persona,\n    topics,\n    post_count: 30\n  }\n}];"
+            },
+            "name": "結果をまとめる",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1380,
+                160
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ $env.DASHBOARD_URL }}/api/persona-research",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "Authorization",
+                            "value": "Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+                        },
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "contentType": "json",
+                "body": {
+                    "user_id": "={{ $env.INSTAGRAM_USER_ID }}",
+                    "persona": "={{ $json.persona }}",
+                    "topics": "={{ $json.topics }}",
+                    "post_count": "={{ $json.post_count }}",
+                    "analyzed_at": "={{ new Date().toISOString() }}"
+                }
+            },
+            "name": "Dashboard API: 保存",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                1600,
+                160
+            ]
+        }
+    ],
+    "connections": {
+        "Cron 毎日2:00": {
+            "main": [
+                [
+                    {
+                        "node": "Supabase: 投稿取得",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Supabase: メトリクス取得",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Instagram: フォロワー属性取得",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Supabase: 投稿取得": {
+            "main": [
+                [
+                    {
+                        "node": "データをマージ",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Supabase: メトリクス取得": {
+            "main": [
+                [
+                    {
+                        "node": "データをマージ",
+                        "type": "main",
+                        "index": 1
+                    }
+                ]
+            ]
+        },
+        "Instagram: フォロワー属性取得": {
+            "main": [
+                [
+                    {
+                        "node": "データをマージ",
+                        "type": "main",
+                        "index": 2
+                    }
+                ]
+            ]
+        },
+        "データをマージ": {
+            "main": [
+                [
+                    {
+                        "node": "Gemini: ペルソナ＋ネタ生成",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Gemini: ペルソナ＋ネタ生成": {
+            "main": [
+                [
+                    {
+                        "node": "ネタをループ用に分割",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "ネタをループ用に分割": {
+            "main": [
+                [
+                    {
+                        "node": "Perplexity: ネタリサーチ",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Perplexity: ネタリサーチ": {
+            "main": [
+                [
+                    {
+                        "node": "結果をまとめる",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "結果をまとめる": {
+            "main": [
+                [
+                    {
+                        "node": "Dashboard API: 保存",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    }
+}
