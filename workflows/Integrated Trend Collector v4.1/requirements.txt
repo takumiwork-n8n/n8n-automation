@@ -1,0 +1,5 @@
+requests==2.32.3
+PyYAML==6.0.2
+google-api-python-client==2.165.0
+google-auth==2.38.0
+pytest==8.3.5
