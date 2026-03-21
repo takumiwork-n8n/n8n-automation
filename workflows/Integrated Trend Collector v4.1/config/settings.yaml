@@ -1,5 +1,5 @@
 google_sheet_id: "1M9jEn_Gh-z3tjJIx9aqo7LDnNFKsHrSWwLuO8KwHmGg"
-channel_sheet_range: "'Youtube_channnel_list'!A:B"
+channel_sheet_range: "'All_info_input'!A:B"
 notion_database_id: "32541b2fa8678058b844f0123c63dd88"
 min_duration_sec: 180
 min_view_count: 1000
