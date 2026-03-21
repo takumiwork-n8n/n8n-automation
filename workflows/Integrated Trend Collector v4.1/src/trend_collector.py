@@ -183,18 +183,23 @@ def dedupe_candidates(candidates: list[VideoCandidate]) -> list[VideoCandidate]:
 def fetch_video_details(video_ids: list[str], api_key: str) -> dict[str, dict[str, Any]]:
     if not video_ids:
         return {}
-    response = requests.get(
-        "https://www.googleapis.com/youtube/v3/videos",
-        params={
-            "part": "statistics,snippet,contentDetails",
-            "id": ",".join(video_ids),
-            "key": api_key,
-        },
-        timeout=30,
-    )
-    response.raise_for_status()
-    payload = response.json()
-    return {item["id"]: item for item in payload.get("items", [])}
+    results: dict[str, dict[str, Any]] = {}
+    for start in range(0, len(video_ids), 50):
+        batch = video_ids[start : start + 50]
+        response = requests.get(
+            "https://www.googleapis.com/youtube/v3/videos",
+            params={
+                "part": "statistics,snippet,contentDetails",
+                "id": ",".join(batch),
+                "key": api_key,
+            },
+            timeout=30,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        for item in payload.get("items", []):
+            results[item["id"]] = item
+    return results
 
 
 def parse_duration_seconds(duration: str) -> int:
