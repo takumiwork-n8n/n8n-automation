@@ -46,7 +46,7 @@ python3 src/trend_collector.py --settings config/settings.yaml
 ## 設定
 `config/settings.yaml` で以下を調整できます。
 - `google_sheet_id`
-- `channel_sheet_range`
+- `channel_sheet_range` (`'All_info_input'!A:B` を既定値として使用)
 - `notion_database_id`
 - `min_duration_sec`
 - `min_view_count`
