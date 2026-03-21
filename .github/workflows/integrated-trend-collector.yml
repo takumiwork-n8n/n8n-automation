@@ -37,11 +37,7 @@ jobs:
           artifact_id="$(gh api "repos/${REPO}/actions/artifacts?name=integrated-trend-collector-state&per_page=1" --jq '.artifacts[] | select(.expired == false) | .id' | head -n 1 || true)"
           if [ -n "${artifact_id}" ]; then
             gh api "repos/${REPO}/actions/artifacts/${artifact_id}/zip" > /tmp/integrated-trend-collector-state.zip
-            python - <<'PY'
-import zipfile
-with zipfile.ZipFile('/tmp/integrated-trend-collector-state.zip') as zf:
-    zf.extractall('.')
-PY
+            python -c "import zipfile; zipfile.ZipFile('/tmp/integrated-trend-collector-state.zip').extractall('.')"
           else
             echo "No previous artifact found"
           fi
