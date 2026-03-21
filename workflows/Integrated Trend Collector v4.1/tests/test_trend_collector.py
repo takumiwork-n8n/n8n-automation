@@ -1,10 +1,17 @@
 import json
 import sys
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.trend_collector import extract_json_object, load_processed_state, parse_duration_seconds, should_keep_video
+from src.trend_collector import (
+    extract_json_object,
+    fetch_video_details,
+    load_processed_state,
+    parse_duration_seconds,
+    should_keep_video,
+)
 
 
 def test_parse_duration_seconds() -> None:
@@ -56,3 +63,19 @@ def test_load_processed_state_prunes_old_entries(tmp_path: Path) -> None:
     kept = load_processed_state(state_file, retention_days=90)
     assert "old" not in kept
     assert "new" in kept
+
+
+def test_fetch_video_details_batches_requests() -> None:
+    ids = [f"id{i}" for i in range(55)]
+
+    def fake_get(_url: str, params: dict, timeout: int) -> Mock:
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {"items": [{"id": video_id} for video_id in params["id"].split(",")]}
+        return response
+
+    with patch("src.trend_collector.requests.get", side_effect=fake_get) as mock_get:
+        result = fetch_video_details(ids, "test-key")
+
+    assert len(result) == 55
+    assert mock_get.call_count == 2
