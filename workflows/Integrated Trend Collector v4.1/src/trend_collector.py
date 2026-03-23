@@ -66,11 +66,14 @@ def build_sheets_service() -> Any:
 
 
 def read_channels(settings: dict[str, Any]) -> list[dict[str, str]]:
+    spreadsheet_id = settings.get("google_sheet_id") or settings.get("sheet_id")
+    if not spreadsheet_id:
+        raise TrendCollectorError("google_sheet_id or sheet_id is required")
     service = build_sheets_service()
     response = (
         service.spreadsheets()
         .values()
-        .get(spreadsheetId=settings["google_sheet_id"], range=settings["channel_sheet_range"])
+        .get(spreadsheetId=spreadsheet_id, range=settings["channel_sheet_range"])
         .execute()
     )
     values = response.get("values", [])

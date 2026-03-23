@@ -121,6 +121,18 @@ def test_read_channels_without_header_reads_first_row() -> None:
     ]
 
 
+def test_read_channels_accepts_sheet_id_key() -> None:
+    settings = {"sheet_id": "sid", "channel_sheet_range": "'All_info_input'!A:B"}
+    values = [["youtube_channel_id"], ["UC111"]]
+    mock_service = Mock()
+    (
+        mock_service.spreadsheets.return_value.values.return_value.get.return_value.execute.return_value
+    ) = {"values": values}
+    with patch("src.trend_collector.build_sheets_service", return_value=mock_service):
+        out = read_channels(settings)
+    assert out == [{"youtube_channel_id": "UC111", "channel_name": ""}]
+
+
 def test_fetch_video_details_batches_requests() -> None:
     ids = [f"id{i}" for i in range(55)]
 
