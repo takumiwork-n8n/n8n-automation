@@ -6,7 +6,9 @@ from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.trend_collector import (
+    VideoCandidate,
     build_analysis_prompt,
+    collect_candidates,
     extract_json_object,
     fetch_video_details,
     load_processed_state,
@@ -95,3 +97,39 @@ def test_build_analysis_prompt_anchors_to_video_metadata() -> None:
     assert "Source title: Test title" in prompt
     assert "Source channel: Test channel" in prompt
     assert "https://www.youtube.com/watch?v=abc123" in prompt
+
+
+def test_collect_candidates_skips_failed_state_items() -> None:
+    state = {
+        "abc123": {
+            "video_id": "abc123",
+            "processed_at": "2026-03-23T00:00:00Z",
+            "status": "failed",
+        }
+    }
+    channels = [{"youtube_channel_id": "ch1", "channel_name": "Channel"}]
+    fake_feed = [
+        VideoCandidate(
+            video_id="abc123",
+            title="t1",
+            description="d1",
+            published_at="2026-03-23T00:00:00Z",
+            channel_id="ch1",
+            channel_title="Channel",
+        ),
+        VideoCandidate(
+            video_id="xyz999",
+            title="t2",
+            description="d2",
+            published_at="2026-03-23T00:00:00Z",
+            channel_id="ch1",
+            channel_title="Channel",
+        ),
+    ]
+
+    with patch("src.trend_collector.fetch_channel_feed", return_value=fake_feed):
+        candidates, total = collect_candidates(channels, state)
+
+    assert total == 2
+    assert len(candidates) == 1
+    assert candidates[0].video_id == "xyz999"
