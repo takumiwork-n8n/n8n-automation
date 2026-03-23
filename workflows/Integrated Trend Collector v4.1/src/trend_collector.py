@@ -268,7 +268,7 @@ def build_analysis_prompt(video: dict[str, Any]) -> str:
     )
 
 
-def analyze_video(video: dict[str, Any], api_key: str) -> dict[str, Any]:
+def analyze_video(video: dict[str, Any], api_key: str, timeout_sec: int) -> dict[str, Any]:
     video_url = f"https://www.youtube.com/watch?v={video['id']}"
     prompt = {
         "contents": [
@@ -294,7 +294,7 @@ def analyze_video(video: dict[str, Any], api_key: str) -> dict[str, Any]:
         ),
         params={"key": api_key},
         json=prompt,
-        timeout=120,
+        timeout=timeout_sec,
     )
     response.raise_for_status()
     payload = response.json()
@@ -468,6 +468,8 @@ def build_run_log(now: datetime, settings: dict[str, Any]) -> dict[str, Any]:
             "max_candidates_per_run": settings["max_candidates_per_run"],
             "processed_retention_days": settings["processed_retention_days"],
             "store_failed_items_in_state": bool(settings.get("store_failed_items_in_state", True)),
+            "gemini_timeout_sec": int(settings.get("gemini_timeout_sec", 45)),
+            "run_soft_timeout_sec": int(settings.get("run_soft_timeout_sec", 180)),
         },
         "summary": {
             "channels": 0,
@@ -535,11 +537,28 @@ def run(settings_path: Path) -> int:
         )
         eligible = eligible[: int(settings["max_candidates_per_run"])]
         run_log["summary"]["eligible_videos"] = len(eligible)
+        print(
+            f"start run: channels={len(channels)} rss={rss_total} new={len(candidates)} eligible={len(eligible)}",
+            flush=True,
+        )
 
         failed_items: list[dict[str, Any]] = []
-        for video in eligible:
+        run_started = datetime.now(UTC)
+        soft_timeout_sec = int(settings.get("run_soft_timeout_sec", 180))
+        gemini_timeout_sec = int(settings.get("gemini_timeout_sec", 45))
+        for idx, video in enumerate(eligible, start=1):
+            elapsed = (datetime.now(UTC) - run_started).total_seconds()
+            if elapsed > soft_timeout_sec:
+                msg = f"run_soft_timeout_sec exceeded ({soft_timeout_sec}s), stop processing remaining videos"
+                run_log["errors"].append(msg)
+                print(msg, flush=True)
+                break
             try:
-                analysis = analyze_video(video, gemini_api_key)
+                print(
+                    f"processing {idx}/{len(eligible)} video_id={video['id']} timeout={gemini_timeout_sec}s",
+                    flush=True,
+                )
+                analysis = analyze_video(video, gemini_api_key, gemini_timeout_sec)
                 notion_payload = build_notion_payload(settings, video, analysis)
                 notion_page_id = create_notion_page(notion_payload, notion_api_key)
                 state[video["id"]] = {
@@ -550,6 +569,7 @@ def run(settings_path: Path) -> int:
                     "status": "processed",
                 }
                 run_log["summary"]["processed"] += 1
+                print(f"processed video_id={video['id']}", flush=True)
             except Exception as exc:  # noqa: BLE001
                 if bool(settings.get("store_failed_items_in_state", True)):
                     state[video["id"]] = {
@@ -569,6 +589,7 @@ def run(settings_path: Path) -> int:
                 )
                 run_log["summary"]["failed"] += 1
                 run_log["errors"].append(str(exc))
+                print(f"failed video_id={video['id']} error={str(exc)[:200]}", flush=True)
 
         if failed_items:
             run_log["failed_items"] = failed_items
