@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import os
 import re
@@ -33,6 +34,16 @@ class VideoCandidate:
     published_at: str
     channel_id: str
     channel_title: str
+
+
+@dataclass
+class ItemResult:
+    video_id: str
+    channel_id: str
+    status: str
+    notion_page_id: str
+    error: str = ""
+    title: str = ""
 
 
 def load_settings(path: Path) -> dict[str, Any]:
@@ -239,6 +250,29 @@ def to_int(value: Any, default: int = 0) -> int:
         return default
 
 
+def parse_max_workers(settings: dict[str, Any]) -> int:
+    raw = to_int(settings.get("max_workers", 2), 2)
+    return max(1, min(raw, 8))
+
+
+def contains_japanese(text: str) -> bool:
+    return bool(re.search(r"[ぁ-んァ-ン一-龯々ー]", text or ""))
+
+
+def analysis_is_japanese(analysis: dict[str, Any]) -> bool:
+    fields = [
+        analysis.get("video_summary", ""),
+        analysis.get("conclusion", ""),
+        *analysis.get("reasons", []),
+        *analysis.get("examples", []),
+        *analysis.get("learnings", []),
+    ]
+    for value in fields:
+        if value and not contains_japanese(str(value)):
+            return False
+    return True
+
+
 def extract_video_id_from_url(url: str) -> str:
     parsed = urlparse(url)
     query = parse_qs(parsed.query)
@@ -293,6 +327,8 @@ def build_analysis_prompt(video: dict[str, Any]) -> str:
         "Use the provided YouTube video as the primary source of truth. "
         "Use the metadata below only to anchor the output to the correct video. "
         "Do not invent details not supported by the video. "
+        "All output text fields must be Japanese (日本語). "
+        "Do not return English sentences. "
         "Return only JSON with this exact schema: "
         "{\"video_title\": string, "
         "\"video_summary\": string, "
@@ -309,23 +345,21 @@ def build_analysis_prompt(video: dict[str, Any]) -> str:
     )
 
 
-def analyze_video(video: dict[str, Any], api_key: str, timeout_sec: int) -> dict[str, Any]:
-    video_url = f"https://www.youtube.com/watch?v={video['id']}"
-    prompt = {
-        "contents": [
-            {
-                "parts": [
-                    {
-                        "file_data": {
-                            "file_uri": video_url
-                        }
-                    },
-                    {
-                        "text": build_analysis_prompt(video)
-                    }
-                ]
-            }
-        ],
+def build_force_japanese_prompt(analysis: dict[str, Any], video: dict[str, Any]) -> str:
+    return (
+        "以下のJSONを日本語に変換してください。"
+        "JSONのキー構造は絶対に変更せず、値だけを日本語にしてください。"
+        "英語の文章は禁止です。"
+        "technologies は技術名なので英語のままでも構いません。"
+        "返答はJSONのみ。\n"
+        f"source_url=https://www.youtube.com/watch?v={video['id']}\n"
+        f"input_json={json.dumps(analysis, ensure_ascii=False)}"
+    )
+
+
+def call_gemini_json(parts: list[dict[str, Any]], api_key: str, timeout_sec: int) -> dict[str, Any]:
+    payload = {
+        "contents": [{"parts": parts}],
         "generationConfig": {"temperature": 0.2, "responseMimeType": "application/json"},
     }
     response = requests.post(
@@ -334,17 +368,26 @@ def analyze_video(video: dict[str, Any], api_key: str, timeout_sec: int) -> dict
             "gemini-2.0-flash:generateContent"
         ),
         params={"key": api_key},
-        json=prompt,
+        json=payload,
         timeout=timeout_sec,
     )
     response.raise_for_status()
-    payload = response.json()
-    candidates = payload.get("candidates", [])
+    body = response.json()
+    candidates = body.get("candidates", [])
     if not candidates:
         raise TrendCollectorError("Gemini returned no candidates")
-    parts = candidates[0].get("content", {}).get("parts", [])
-    text = "".join(part.get("text", "") for part in parts)
-    data = extract_json_object(text)
+    response_parts = candidates[0].get("content", {}).get("parts", [])
+    text = "".join(part.get("text", "") for part in response_parts)
+    return extract_json_object(text)
+
+
+def analyze_video(video: dict[str, Any], api_key: str, timeout_sec: int) -> dict[str, Any]:
+    video_url = f"https://www.youtube.com/watch?v={video['id']}"
+    data = call_gemini_json(
+        parts=[{"file_data": {"file_uri": video_url}}, {"text": build_analysis_prompt(video)}],
+        api_key=api_key,
+        timeout_sec=timeout_sec,
+    )
     for key in [
         "video_title",
         "video_summary",
@@ -356,6 +399,26 @@ def analyze_video(video: dict[str, Any], api_key: str, timeout_sec: int) -> dict
     ]:
         if key not in data:
             raise TrendCollectorError(f"Gemini response missing field: {key}")
+    if not analysis_is_japanese(data):
+        rewritten = call_gemini_json(
+            parts=[{"text": build_force_japanese_prompt(data, video)}],
+            api_key=api_key,
+            timeout_sec=timeout_sec,
+        )
+        for key in [
+            "video_title",
+            "video_summary",
+            "technologies",
+            "conclusion",
+            "reasons",
+            "examples",
+            "learnings",
+        ]:
+            if key not in rewritten:
+                raise TrendCollectorError(f"Gemini JP rewrite missing field: {key}")
+        if not analysis_is_japanese(rewritten):
+            raise TrendCollectorError("Gemini output is not Japanese")
+        return rewritten
     return data
 
 
@@ -511,6 +574,7 @@ def build_run_log(now: datetime, settings: dict[str, Any]) -> dict[str, Any]:
             "store_failed_items_in_state": bool(settings.get("store_failed_items_in_state", True)),
             "gemini_timeout_sec": int(settings.get("gemini_timeout_sec", 45)),
             "run_soft_timeout_sec": int(settings.get("run_soft_timeout_sec", 180)),
+            "max_workers": parse_max_workers(settings),
         },
         "summary": {
             "channels": 0,
@@ -545,6 +609,38 @@ def collect_candidates(
     rss_total = len(candidates)
     deduped = dedupe_candidates(candidates)
     return [item for item in deduped if item.video_id not in state], rss_total
+
+
+def process_video_item(
+    video: dict[str, Any],
+    settings: dict[str, Any],
+    gemini_api_key: str,
+    notion_api_key: str,
+    gemini_timeout_sec: int,
+) -> ItemResult:
+    video_id = video["id"]
+    channel_id = video.get("snippet", {}).get("channelId", "")
+    title = video.get("snippet", {}).get("title", "")
+    try:
+        analysis = analyze_video(video, gemini_api_key, gemini_timeout_sec)
+        notion_payload = build_notion_payload(settings, video, analysis)
+        notion_page_id = create_notion_page(notion_payload, notion_api_key)
+        return ItemResult(
+            video_id=video_id,
+            channel_id=channel_id,
+            status="processed",
+            notion_page_id=notion_page_id,
+            title=title,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return ItemResult(
+            video_id=video_id,
+            channel_id=channel_id,
+            status="failed",
+            notion_page_id="",
+            error=str(exc),
+            title=title,
+        )
 
 
 def run(settings_path: Path) -> int:
@@ -592,50 +688,83 @@ def run(settings_path: Path) -> int:
         run_started = datetime.now(UTC)
         soft_timeout_sec = int(settings.get("run_soft_timeout_sec", 180))
         gemini_timeout_sec = int(settings.get("gemini_timeout_sec", 45))
-        for idx, video in enumerate(eligible, start=1):
-            elapsed = (datetime.now(UTC) - run_started).total_seconds()
-            if elapsed > soft_timeout_sec:
-                msg = f"run_soft_timeout_sec exceeded ({soft_timeout_sec}s), stop processing remaining videos"
-                run_log["errors"].append(msg)
-                print(msg, flush=True)
-                break
-            try:
+        max_workers = parse_max_workers(settings)
+        futures: dict[Any, str] = {}
+        submitted = 0
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            for video in eligible:
+                elapsed = (datetime.now(UTC) - run_started).total_seconds()
+                if elapsed > soft_timeout_sec:
+                    msg = (
+                        f"run_soft_timeout_sec exceeded ({soft_timeout_sec}s), "
+                        "stop submitting remaining videos"
+                    )
+                    run_log["errors"].append(msg)
+                    print(msg, flush=True)
+                    break
+                submitted += 1
                 print(
-                    f"processing {idx}/{len(eligible)} video_id={video['id']} timeout={gemini_timeout_sec}s",
+                    f"submit {submitted}/{len(eligible)} video_id={video['id']} timeout={gemini_timeout_sec}s",
                     flush=True,
                 )
-                analysis = analyze_video(video, gemini_api_key, gemini_timeout_sec)
-                notion_payload = build_notion_payload(settings, video, analysis)
-                notion_page_id = create_notion_page(notion_payload, notion_api_key)
-                state[video["id"]] = {
-                    "video_id": video["id"],
-                    "processed_at": iso_now(),
-                    "channel_id": video.get("snippet", {}).get("channelId", ""),
-                    "notion_page_id": notion_page_id,
-                    "status": "processed",
-                }
-                run_log["summary"]["processed"] += 1
-                print(f"processed video_id={video['id']}", flush=True)
-            except Exception as exc:  # noqa: BLE001
-                if bool(settings.get("store_failed_items_in_state", True)):
-                    state[video["id"]] = {
-                        "video_id": video["id"],
-                        "processed_at": iso_now(),
-                        "channel_id": video.get("snippet", {}).get("channelId", ""),
-                        "notion_page_id": "",
-                        "status": "failed",
-                        "last_error": str(exc)[:1000],
-                    }
-                failed_items.append(
-                    {
-                        "video_id": video["id"],
-                        "title": video.get("snippet", {}).get("title", ""),
-                        "error": str(exc),
-                    }
+                future = executor.submit(
+                    process_video_item,
+                    video,
+                    settings,
+                    gemini_api_key,
+                    notion_api_key,
+                    gemini_timeout_sec,
                 )
-                run_log["summary"]["failed"] += 1
-                run_log["errors"].append(str(exc))
-                print(f"failed video_id={video['id']} error={str(exc)[:200]}", flush=True)
+                futures[future] = video["id"]
+
+            completed = 0
+            for future in as_completed(futures):
+                completed += 1
+                try:
+                    result = future.result()
+                except Exception as exc:  # noqa: BLE001
+                    video_id = futures[future]
+                    result = ItemResult(
+                        video_id=video_id,
+                        channel_id="",
+                        status="failed",
+                        notion_page_id="",
+                        error=str(exc),
+                    )
+
+                if result.status == "processed":
+                    state[result.video_id] = {
+                        "video_id": result.video_id,
+                        "processed_at": iso_now(),
+                        "channel_id": result.channel_id,
+                        "notion_page_id": result.notion_page_id,
+                        "status": "processed",
+                    }
+                    run_log["summary"]["processed"] += 1
+                    print(f"done {completed}/{submitted} processed video_id={result.video_id}", flush=True)
+                else:
+                    if bool(settings.get("store_failed_items_in_state", True)):
+                        state[result.video_id] = {
+                            "video_id": result.video_id,
+                            "processed_at": iso_now(),
+                            "channel_id": result.channel_id,
+                            "notion_page_id": "",
+                            "status": "failed",
+                            "last_error": result.error[:1000],
+                        }
+                    failed_items.append(
+                        {
+                            "video_id": result.video_id,
+                            "title": result.title,
+                            "error": result.error,
+                        }
+                    )
+                    run_log["summary"]["failed"] += 1
+                    run_log["errors"].append(result.error)
+                    print(
+                        f"done {completed}/{submitted} failed video_id={result.video_id} error={result.error[:200]}",
+                        flush=True,
+                    )
 
         if failed_items:
             run_log["failed_items"] = failed_items

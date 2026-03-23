@@ -7,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.trend_collector import (
     VideoCandidate,
+    analysis_is_japanese,
     build_analysis_prompt,
     collect_candidates,
     extract_video_id_from_url,
@@ -14,6 +15,7 @@ from src.trend_collector import (
     fetch_video_details,
     load_processed_state,
     parse_duration_seconds,
+    parse_max_workers,
     read_channels,
     should_keep_video,
 )
@@ -67,6 +69,32 @@ def test_extract_video_id_from_url_multiple_formats() -> None:
 def test_extract_json_object() -> None:
     payload = extract_json_object('prefix {"video_title":"a","video_summary":"b","technologies":[],"conclusion":"c","reasons":[],"examples":[],"learnings":[]} suffix')
     assert payload["video_title"] == "a"
+
+
+def test_parse_max_workers_clamps_range() -> None:
+    assert parse_max_workers({"max_workers": 0}) == 1
+    assert parse_max_workers({"max_workers": 2}) == 2
+    assert parse_max_workers({"max_workers": 99}) == 8
+    assert parse_max_workers({}) == 2
+
+
+def test_analysis_is_japanese() -> None:
+    ja = {
+        "video_summary": "これは要約です",
+        "conclusion": "結論です",
+        "reasons": ["理由です"],
+        "examples": ["具体例です"],
+        "learnings": ["学びです"],
+    }
+    en = {
+        "video_summary": "This is summary",
+        "conclusion": "Conclusion",
+        "reasons": ["Reason"],
+        "examples": ["Example"],
+        "learnings": ["Learning"],
+    }
+    assert analysis_is_japanese(ja)
+    assert not analysis_is_japanese(en)
 
 
 def test_load_processed_state_prunes_old_entries(tmp_path: Path) -> None:
@@ -162,6 +190,7 @@ def test_build_analysis_prompt_anchors_to_video_metadata() -> None:
     assert "Source title: Test title" in prompt
     assert "Source channel: Test channel" in prompt
     assert "https://www.youtube.com/watch?v=abc123" in prompt
+    assert "must be Japanese" in prompt
 
 
 def test_collect_candidates_skips_failed_state_items() -> None:

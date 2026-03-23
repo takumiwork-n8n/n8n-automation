@@ -8,6 +8,7 @@ min_duration_sec: 180
 min_view_count: 1000
 max_rss_candidates: 50
 max_candidates_per_run: 5
+max_workers: 2
 processed_retention_days: 90
 state_dir: "state"
 logs_dir: "logs"
