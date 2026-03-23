@@ -5,5 +5,6 @@ min_duration_sec: 180
 min_view_count: 1000
 max_candidates_per_run: 5
 processed_retention_days: 90
+max_transcript_chars: 12000
 state_dir: "state"
 logs_dir: "logs"
