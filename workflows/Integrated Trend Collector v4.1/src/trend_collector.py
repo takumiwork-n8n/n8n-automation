@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 from xml.etree import ElementTree as ET
 
 import requests
@@ -77,15 +78,24 @@ def read_channels(settings: dict[str, Any]) -> list[dict[str, str]]:
         return []
 
     header = [cell.strip() for cell in values[0]]
+    has_header = False
+    for candidate in ("youtube_channel_id", "channel_id", "channelId"):
+        if candidate in header:
+            has_header = True
+            break
+    rows = values[1:] if has_header else values
     channels: list[dict[str, str]] = []
-    for row in values[1:]:
+    for row in rows:
         record = {header[idx]: row[idx] for idx in range(min(len(header), len(row)))}
-        channel_id = (
-            record.get("youtube_channel_id")
-            or record.get("channel_id")
-            or record.get("channelId")
-            or ""
-        ).strip()
+        if has_header:
+            channel_id = (
+                record.get("youtube_channel_id")
+                or record.get("channel_id")
+                or record.get("channelId")
+                or ""
+            ).strip()
+        else:
+            channel_id = (row[0] if row else "").strip()
         if not channel_id:
             continue
         channels.append(
@@ -114,8 +124,11 @@ def load_processed_state(state_file: Path, retention_days: int) -> dict[str, dic
     if not state_file.exists():
         return {}
 
-    with state_file.open("r", encoding="utf-8") as fh:
-        payload = json.load(fh)
+    try:
+        with state_file.open("r", encoding="utf-8") as fh:
+            payload = json.load(fh)
+    except json.JSONDecodeError:
+        return {}
 
     items = payload.get("items", {})
     cutoff = datetime.now(UTC) - timedelta(days=retention_days)
@@ -124,7 +137,11 @@ def load_processed_state(state_file: Path, retention_days: int) -> dict[str, dic
         processed_at = entry.get("processed_at")
         if not processed_at:
             continue
-        if parse_iso8601_datetime(processed_at) >= cutoff:
+        try:
+            parsed = parse_iso8601_datetime(processed_at)
+        except ValueError:
+            continue
+        if parsed >= cutoff:
             kept[video_id] = entry
     return kept
 
@@ -212,6 +229,27 @@ def parse_duration_seconds(duration: str) -> int:
     return hours * 3600 + minutes * 60 + seconds
 
 
+def to_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def extract_video_id_from_url(url: str) -> str:
+    parsed = urlparse(url)
+    query = parse_qs(parsed.query)
+    if query.get("v"):
+        return query["v"][0]
+    path = parsed.path.strip("/")
+    if parsed.netloc in {"youtu.be", "www.youtu.be"} and path:
+        return path.split("/")[0]
+    parts = path.split("/")
+    if len(parts) >= 2 and parts[0] in {"shorts", "embed", "live"}:
+        return parts[1]
+    return ""
+
+
 def should_keep_video(video: dict[str, Any], settings: dict[str, Any]) -> bool:
     snippet = video.get("snippet", {})
     statistics = video.get("statistics", {})
@@ -223,11 +261,11 @@ def should_keep_video(video: dict[str, Any], settings: dict[str, Any]) -> bool:
         return False
 
     duration_seconds = parse_duration_seconds(content_details.get("duration", ""))
-    if duration_seconds < int(settings["min_duration_sec"]):
+    if duration_seconds < to_int(settings.get("min_duration_sec"), 0):
         return False
 
-    view_count = int(statistics.get("viewCount", 0))
-    if view_count < int(settings["min_view_count"]):
+    view_count = to_int(statistics.get("viewCount", 0), 0)
+    if view_count < to_int(settings.get("min_view_count"), 0):
         return False
 
     return True
@@ -490,12 +528,17 @@ def write_run_log(log_path: Path, payload: dict[str, Any]) -> None:
 
 
 def collect_candidates(
-    channels: list[dict[str, str]], state: dict[str, dict[str, str]]
+    channels: list[dict[str, str]], state: dict[str, dict[str, str]], errors: list[str] | None = None
 ) -> tuple[list[VideoCandidate], int]:
     candidates: list[VideoCandidate] = []
     for channel in channels:
         channel_id = channel["youtube_channel_id"]
-        candidates.extend(fetch_channel_feed(channel_id))
+        try:
+            candidates.extend(fetch_channel_feed(channel_id))
+        except Exception as exc:
+            if errors is not None:
+                errors.append(f"RSS fetch failed channel_id={channel_id}: {exc}")
+            continue
     rss_total = len(candidates)
     deduped = dedupe_candidates(candidates)
     return [item for item in deduped if item.video_id not in state], rss_total
@@ -516,7 +559,7 @@ def run(settings_path: Path) -> int:
         channels = read_channels(settings)
         run_log["summary"]["channels"] = len(channels)
 
-        candidates, rss_total = collect_candidates(channels, state)
+        candidates, rss_total = collect_candidates(channels, state, run_log["errors"])
         run_log["summary"]["rss_candidates"] = rss_total
         run_log["summary"]["new_candidates"] = len(candidates)
 
