@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.trend_collector import (
+    build_analysis_source,
     extract_json_object,
     fetch_video_details,
     load_processed_state,
@@ -79,3 +80,37 @@ def test_fetch_video_details_batches_requests() -> None:
 
     assert len(result) == 55
     assert mock_get.call_count == 2
+
+
+def test_build_analysis_source_uses_transcript_when_available() -> None:
+    video = {
+        "id": "abc123",
+        "snippet": {
+            "title": "Test title",
+            "channelTitle": "Test channel",
+            "description": "Test description",
+        },
+    }
+    settings = {"max_transcript_chars": 100}
+    with patch("src.trend_collector.fetch_transcript_text", return_value="line1\nline2"):
+        source = build_analysis_source(video, settings)
+
+    assert "Video ID: abc123" in source
+    assert "Title: Test title" in source
+    assert "Transcript:\nline1\nline2" in source
+
+
+def test_build_analysis_source_marks_missing_transcript() -> None:
+    video = {
+        "id": "abc123",
+        "snippet": {
+            "title": "Test title",
+            "channelTitle": "Test channel",
+            "description": "Test description",
+        },
+    }
+    settings = {"max_transcript_chars": 100}
+    with patch("src.trend_collector.fetch_transcript_text", return_value=""):
+        source = build_analysis_source(video, settings)
+
+    assert "Transcript: unavailable" in source
