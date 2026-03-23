@@ -467,6 +467,7 @@ def build_run_log(now: datetime, settings: dict[str, Any]) -> dict[str, Any]:
             "min_view_count": settings["min_view_count"],
             "max_candidates_per_run": settings["max_candidates_per_run"],
             "processed_retention_days": settings["processed_retention_days"],
+            "store_failed_items_in_state": bool(settings.get("store_failed_items_in_state", True)),
         },
         "summary": {
             "channels": 0,
@@ -546,9 +547,19 @@ def run(settings_path: Path) -> int:
                     "processed_at": iso_now(),
                     "channel_id": video.get("snippet", {}).get("channelId", ""),
                     "notion_page_id": notion_page_id,
+                    "status": "processed",
                 }
                 run_log["summary"]["processed"] += 1
             except Exception as exc:  # noqa: BLE001
+                if bool(settings.get("store_failed_items_in_state", True)):
+                    state[video["id"]] = {
+                        "video_id": video["id"],
+                        "processed_at": iso_now(),
+                        "channel_id": video.get("snippet", {}).get("channelId", ""),
+                        "notion_page_id": "",
+                        "status": "failed",
+                        "last_error": str(exc)[:1000],
+                    }
                 failed_items.append(
                     {
                         "video_id": video["id"],
