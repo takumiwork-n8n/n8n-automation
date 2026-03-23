@@ -6,5 +6,7 @@ min_view_count: 1000
 max_candidates_per_run: 5
 processed_retention_days: 90
 store_failed_items_in_state: true
+gemini_timeout_sec: 45
+run_soft_timeout_sec: 180
 state_dir: "state"
 logs_dir: "logs"
