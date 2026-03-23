@@ -15,6 +15,8 @@ import requests
 import yaml
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api._errors import NoTranscriptFound, TranscriptsDisabled
 
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
@@ -244,7 +246,46 @@ def extract_json_object(text: str) -> dict[str, Any]:
         raise TrendCollectorError("Gemini response JSON parsing failed") from exc
 
 
-def analyze_video(video_url: str, api_key: str) -> dict[str, Any]:
+def fetch_transcript_text(video_id: str, max_chars: int) -> str:
+    try:
+        transcript = YouTubeTranscriptApi().fetch(video_id, languages=["ja", "en"])
+    except (NoTranscriptFound, TranscriptsDisabled):
+        return ""
+    chunks: list[str] = []
+    size = 0
+    for item in transcript:
+        text = item.text.strip()
+        if not text:
+            continue
+        size += len(text) + 1
+        if size > max_chars:
+            break
+        chunks.append(text)
+    return "\n".join(chunks)
+
+
+def build_analysis_source(video: dict[str, Any], settings: dict[str, Any]) -> str:
+    snippet = video.get("snippet", {})
+    video_id = video["id"]
+    transcript = fetch_transcript_text(video_id, int(settings.get("max_transcript_chars", 12000)))
+    description = (snippet.get("description") or "").strip()
+    pieces = [
+        f"Video ID: {video_id}",
+        f"Video URL: https://www.youtube.com/watch?v={video_id}",
+        f"Title: {snippet.get('title', '')}",
+        f"Channel: {snippet.get('channelTitle', '')}",
+    ]
+    if description:
+        pieces.append(f"Description:\n{description[:4000]}")
+    if transcript:
+        pieces.append(f"Transcript:\n{transcript}")
+    else:
+        pieces.append("Transcript: unavailable")
+    return "\n\n".join(pieces)
+
+
+def analyze_video(video: dict[str, Any], settings: dict[str, Any], api_key: str) -> dict[str, Any]:
+    source = build_analysis_source(video, settings)
     prompt = {
         "contents": [
             {
@@ -252,6 +293,9 @@ def analyze_video(video_url: str, api_key: str) -> dict[str, Any]:
                     {
                         "text": (
                             "You are summarizing a YouTube video in Japanese. "
+                            "Use only the source metadata and transcript provided below. "
+                            "If transcript is unavailable, base the summary only on the title and description, "
+                            "and avoid inventing details not supported by the source. "
                             "Return only JSON with this exact schema: "
                             "{\"video_title\": string, "
                             "\"video_summary\": string, "
@@ -260,8 +304,9 @@ def analyze_video(video_url: str, api_key: str) -> dict[str, Any]:
                             "\"reasons\": string[], "
                             "\"examples\": string[], "
                             "\"learnings\": string[]}. "
+                            "Set video_title to the exact source title. "
                             "Keep technologies empty when none are mentioned. "
-                            f"Analyze this video URL: {video_url}"
+                            f"Source:\n{source}"
                         )
                     }
                 ]
@@ -405,7 +450,7 @@ def build_notion_payload(
         "parent": {"database_id": settings["notion_database_id"]},
         "cover": {"type": "external", "external": {"url": thumb_url}} if thumb_url else None,
         "properties": {
-            "タイトル": {"title": [{"text": {"content": analysis["video_title"][:2000]}}]},
+            "タイトル": {"title": [{"text": {"content": snippet.get("title", "")[:2000]}}]},
             "いいね数": {"number": int(statistics.get("likeCount", 0))},
             "再生数": {"number": int(statistics.get("viewCount", 0))},
             "セーブ数": {"number": int(statistics.get("favoriteCount", 0))},
@@ -519,9 +564,8 @@ def run(settings_path: Path) -> int:
 
         failed_items: list[dict[str, Any]] = []
         for video in eligible:
-            video_url = f"https://www.youtube.com/watch?v={video['id']}"
             try:
-                analysis = analyze_video(video_url, gemini_api_key)
+                analysis = analyze_video(video, settings, gemini_api_key)
                 notion_payload = build_notion_payload(settings, video, analysis)
                 notion_page_id = create_notion_page(notion_payload, notion_api_key)
                 state[video["id"]] = {
