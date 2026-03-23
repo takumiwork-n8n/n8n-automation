@@ -5,5 +5,6 @@ min_duration_sec: 180
 min_view_count: 1000
 max_candidates_per_run: 5
 processed_retention_days: 90
+store_failed_items_in_state: true
 state_dir: "state"
 logs_dir: "logs"
